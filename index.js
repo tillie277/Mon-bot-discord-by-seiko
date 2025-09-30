@@ -17,7 +17,7 @@ const client = new Client({
 
 // -------------------- Config / Constants --------------------
 const MAIN_COLOR = "#8A2BE2";
-const OWNER_ID = "726063885492158474";
+const OWNER_ID = "726063885492158474"; // Remplace par ton ID owner si nécessaire
 const DATA_DIR = path.resolve(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
@@ -51,7 +51,7 @@ client.wakeupCooldown = new Map();
 client.wakeupInProgress = new Set(); 
 client.lockedNames = new Set(); 
 
-// -------------------- Persistence helpers --------------------
+// -------------------- Utilitaires persistence --------------------
 function readJSONSafe(p) {
   try { if (!fs.existsSync(p)) return null; return JSON.parse(fs.readFileSync(p, 'utf8')); }
   catch (e) { console.error("Erreur lecture JSON", p, e); return null; }
@@ -82,11 +82,20 @@ function loadAll() {
 }
 loadAll();
 
-// -------------------- Permission helpers --------------------
+// -------------------- Permissions helpers --------------------
 function isOwner(id) { return id === OWNER_ID; }
 function isWL(id) { return client.whitelist.has(id) || isOwner(id); }
-function isAdmin(member) { if (!member) return false; try { return member.permissions.has(PermissionsBitField.Flags.Administrator); } catch { return false; } }
-function sendNoAccess(message) { const embed = new EmbedBuilder().setTitle("❌ Accès refusé").setDescription(`${message.author}, tu n'as pas accès à cette commande !`).setColor(MAIN_COLOR); return message.channel.send({ embeds: [embed] }).catch(()=>{}); }
+function isAdmin(member) {
+  if (!member) return false;
+  try { return member.permissions.has(PermissionsBitField.Flags.Administrator); } catch { return false; }
+}
+function sendNoAccess(message) {
+  const embed = new EmbedBuilder()
+    .setTitle("❌ Accès refusé")
+    .setDescription(`${message.author}, tu n'as pas accès à cette commande !`)
+    .setColor(MAIN_COLOR);
+  return message.channel.send({ embeds: [embed] }).catch(()=>{});
+}
 function simpleEmbed(title, desc) { return new EmbedBuilder().setTitle(title).setDescription(desc).setColor(MAIN_COLOR); }
 function isOnCooldown(map, id, msDuration) { const last = map.get(id) || 0; return Date.now() - last < msDuration; }
 function setCooldown(map, id) { map.set(id, Date.now()); }
@@ -111,99 +120,9 @@ client.on('messageCreate', async message => {
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // --- COMMANDES ---
+    // --- commandes simplifiées ici pour l’exemple
     if (command === 'help') return message.channel.send({ embeds: [simpleEmbed("Help", "Toutes les commandes disponibles")] });
     if (command === 'ping') return message.channel.send("Pong !");
-
-    // +dog
-    if (command === 'dog') {
-      const sub = args[0];
-      if (sub === 'add') {
-        if (!isWL(message.author.id)) return sendNoAccess(message);
-        const [dogId, masterId] = args.slice(1);
-        if (!dogId || !masterId) return message.reply("Usage: +dog add <dogId> <masterId>");
-        client.dogs.set(dogId, masterId);
-        persistAll();
-        return message.reply(`🐶 Le chien ${dogId} a été ajouté à ${masterId}`);
-      }
-      if (sub === 'list') {
-        if (client.dogs.size === 0) return message.reply("Aucun chien enregistré.");
-        let list = "";
-        for (const [dog, master] of client.dogs.entries()) list += `🐶 ${dog} → ${master}\n`;
-        return message.channel.send(list);
-      }
-    }
-
-    // +whitelist / +blacklist / +wetlist / +banlist
-    const lists = {
-      whitelist: client.whitelist,
-      blacklist: client.blacklist,
-      wetlist: client.wetList,
-      banlist: client.banList,
-      permMv: client.permMvUsers,
-      lockedNames: client.lockedNames
-    };
-    if (lists[command]) {
-      const sub = args[0];
-      if (!isWL(message.author.id)) return sendNoAccess(message);
-
-      if (sub === 'add') {
-        const id = args[1];
-        if (!id) return message.reply(`Usage: +${command} add <id>`);
-        lists[command].add(id);
-        persistAll();
-        return message.reply(`✅ ${id} ajouté à ${command}`);
-      }
-      if (sub === 'remove') {
-        const id = args[1];
-        if (!id) return message.reply(`Usage: +${command} remove <id>`);
-        lists[command].delete(id);
-        persistAll();
-        return message.reply(`❌ ${id} supprimé de ${command}`);
-      }
-      if (sub === 'list') {
-        if (lists[command].size === 0) return message.reply(`${command} est vide.`);
-        return message.channel.send([...lists[command]].join("\n"));
-      }
-    }
-
-    // +limitroles
-    if (command === 'limitroles') {
-      if (!isWL(message.author.id)) return sendNoAccess(message);
-      const sub = args[0];
-      const roleId = args[1];
-      if (!roleId) return message.reply("Usage: +limitroles <add|remove|list> <roleId> [max]");
-      if (sub === 'add') {
-        const max = parseInt(args[2]);
-        if (isNaN(max)) return message.reply("Précise un nombre pour le max.");
-        client.limitRoles.set(roleId, max);
-        persistAll();
-        return message.reply(`✅ Limite du rôle ${roleId} fixée à ${max}`);
-      }
-      if (sub === 'remove') {
-        client.limitRoles.delete(roleId);
-        persistAll();
-        return message.reply(`❌ Limite du rôle ${roleId} supprimée`);
-      }
-      if (sub === 'list') {
-        if (client.limitRoles.size === 0) return message.reply("Aucun rôle limité.");
-        let list = "";
-        for (const [r, m] of client.limitRoles.entries()) list += `${r} → ${m}\n`;
-        return message.channel.send(list);
-      }
-    }
-
-    // +snipe
-    if (command === 'snipe') {
-      const snipe = client.snipes.get(message.channel.id);
-      if (!snipe) return message.reply("Aucun message à sniper !");
-      const embed = new EmbedBuilder()
-        .setAuthor({ name: snipe.author.tag, iconURL: snipe.author.displayAvatarURL() })
-        .setDescription(snipe.content)
-        .setColor(MAIN_COLOR)
-        .setFooter({ text: `Sniped at ${new Date(snipe.timestamp).toLocaleTimeString()}` });
-      return message.channel.send({ embeds: [embed] });
-    }
 
   } catch (err) {
     console.error("Erreur gestion message:", err);
