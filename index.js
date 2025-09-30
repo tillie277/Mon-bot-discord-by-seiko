@@ -1,4 +1,4 @@
-require('dotenv').config(); // facultatif si tu utilises secrets Render
+require('dotenv').config();
 
 const { Client, GatewayIntentBits } = require("discord.js");
 
