@@ -1,5 +1,4 @@
-require('dotenv').config(); 
-client.login(process.env.TOKEN);
+require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
