@@ -1018,11 +1018,9 @@ client.on('messageCreate', async message => {
 });
 
 // -------------------- READY --------------------
-client.once('ready', () => {
-  console.log(`✅ Connecté en tant que ${client.user.tag}`);
-  try { client.user.setActivity("+help", { type: "LISTENING" }).catch(()=>{}); } catch {}
+client.on("clientReady", () => {
+    console.log(`✅ Connecté en tant que ${client.user.tag}`);
 });
-
 // --------------------Graceful shutdown--------------------
 process.on('SIGINT', () => { console.log("SIGINT reçu, sauvegarde..."); persistAll(); process.exit(); });
 process.on('beforeExit', () => { persistAll(); });
