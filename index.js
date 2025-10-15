@@ -168,6 +168,38 @@ function parseRoleArg(guild, arg) {
 }
 const ownerOrWLOnly = id => isOwner(id) || isWL(id);
 
+// -------------------- LOG CHANNEL HELPERS --------------------
+async function ensureLogChannels(guild) {
+  // return an object with channel references (may be null if cannot create)
+  // names: messages-logs, role-logs, boost-logs, commande-logs, raidlogs
+  const names = {
+    messages: 'messages-logs',
+    roles: 'role-logs',
+    boosts: 'boost-logs',
+    commands: 'commande-logs',
+    raids: 'raidlogs'
+  };
+  const out = {};
+  try {
+    const existing = guild.channels.cache;
+    for (const k of Object.keys(names)) {
+      const name = names[k];
+      const found = existing.find(ch => ch.name === name && ch.type === ChannelType.GuildText);
+      if (found) out[k] = found;
+      else {
+        // attempt to create (only if bot has manage channels)
+        try {
+          const created = await guild.channels.create({ name, type: ChannelType.GuildText, reason: 'Création salons logs par bot' }).catch(()=>null);
+          out[k] = created || null;
+        } catch (e) { out[k] = null; }
+      }
+    }
+  } catch (e) {
+    console.error("ensureLogChannels error:", e);
+  }
+  return out;
+}
+
 // Permission helper to set text lock
 async function setTextLock(channel, lock) {
   try {
@@ -302,9 +334,60 @@ function pingExternal(url) {
 setInterval(() => pingExternal(EXTERNAL_PING_URL), 5 * 60 * 1000); // ping externe toutes les 5 min
 
 // -------------------- EVENTS --------------------
-client.on('messageDelete', message => {
-  if (!message || !message.author || message.author.bot) return;
-  if (message.channel) client.snipes.set(message.channel.id, { content: message.content || "", author: message.author, timestamp: Date.now() });
+client.on('messageDelete', async message => {
+  try {
+    if (!message || !message.author || message.author.bot) return;
+    // store snipe for this channel (deleted message)
+    if (message.channel) client.snipes.set(message.channel.id, { content: message.content || "", author: message.author, timestamp: Date.now() });
+
+    // send embed to messages-logs if channel exists or create it
+    if (message.guild) {
+      try {
+        const logs = await ensureLogChannels(message.guild);
+        const ch = logs.messages;
+        if (ch) {
+          const embed = new EmbedBuilder()
+            .setTitle("Message supprimé")
+            .addFields(
+              { name: "Auteur", value: `${message.author.tag} (${message.author.id})`, inline: true },
+              { name: "Salon", value: `${message.channel.name} (${message.channel.id})`, inline: true },
+              { name: "Contenu", value: message.content ? (message.content.length > 1024 ? message.content.slice(0,1000)+"..." : message.content) : "(aucun contenu)" }
+            )
+            .setColor(MAIN_COLOR)
+            .setTimestamp();
+          ch.send({ embeds: [embed] }).catch(()=>{});
+        }
+      } catch (e) { /* ignore */ }
+    }
+  } catch (e) { console.error("messageDelete handler error:", e); }
+});
+
+client.on('messageUpdate', async (oldMessage, newMessage) => {
+  try {
+    if (!oldMessage || !oldMessage.author) return;
+    if (oldMessage.author.bot) return;
+    if (oldMessage.content === newMessage.content) return; // ignore embed-only/no change
+    // update snipe? we keep last deleted in snipes; for edits we log in messages-logs
+    if (oldMessage.guild) {
+      try {
+        const logs = await ensureLogChannels(oldMessage.guild);
+        const ch = logs.messages;
+        if (ch) {
+          const embed = new EmbedBuilder()
+            .setTitle("Message modifié")
+            .addFields(
+              { name: "Auteur", value: `${oldMessage.author.tag} (${oldMessage.author.id})`, inline: true },
+              { name: "Salon", value: `${oldMessage.channel.name} (${oldMessage.channel.id})`, inline: true },
+              { name: "Avant", value: oldMessage.content ? (oldMessage.content.length > 1024 ? oldMessage.content.slice(0,1000)+"..." : oldMessage.content) : "(vide)" },
+              { name: "Après", value: newMessage.content ? (newMessage.content.length > 1024 ? newMessage.content.slice(0,1000)+"..." : newMessage.content) : "(vide)" }
+            )
+            .setColor(MAIN_COLOR)
+            .setTimestamp();
+          ch.send({ embeds: [embed] }).catch(()=>{});
+        }
+      } catch (e) {}
+    }
+  } catch (e) { console.error("messageUpdate handler error:", e); }
 });
 
 client.on('guildMemberAdd', async member => {
@@ -360,6 +443,82 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         await newMember.setNickname(info.lockedName).catch(()=>{});
       }
     }
+
+    // detect role changes (added / removed)
+    try {
+      const g = newMember.guild;
+      const logs = await ensureLogChannels(g);
+      const roleCh = logs.roles;
+      if (roleCh) {
+        const oldRoles = new Set(oldMember.roles.cache.keys());
+        const newRoles = new Set(newMember.roles.cache.keys());
+        // added
+        for (const r of newMember.roles.cache.values()) {
+          if (!oldRoles.has(r.id)) {
+            const embed = new EmbedBuilder()
+              .setTitle("Rôle ajouté")
+              .addFields(
+                { name: "Membre", value: `${newMember.user.tag} (${newMember.id})`, inline:true },
+                { name: "Rôle", value: `${r.name} (${r.id})`, inline:true },
+                { name: "Heure", value: new Date().toLocaleString(), inline: false }
+              )
+              .setColor(MAIN_COLOR)
+              .setTimestamp();
+            roleCh.send({ embeds: [embed] }).catch(()=>{});
+          }
+        }
+        // removed
+        for (const rId of oldRoles) {
+          if (!newRoles.has(rId)) {
+            const r = oldMember.guild.roles.cache.get(rId);
+            const embed = new EmbedBuilder()
+              .setTitle("Rôle retiré")
+              .addFields(
+                { name: "Membre", value: `${newMember.user.tag} (${newMember.id})`, inline:true },
+                { name: "Rôle", value: `${r ? r.name : rId} (${rId})`, inline:true },
+                { name: "Heure", value: new Date().toLocaleString(), inline: false }
+              )
+              .setColor(MAIN_COLOR)
+              .setTimestamp();
+            roleCh.send({ embeds: [embed] }).catch(()=>{});
+          }
+        }
+      }
+    } catch (e) { /* ignore role log errors */ }
+
+    // detect boosts/unboosts via premiumSince timestamp changes
+    try {
+      if (oldMember.premiumSince === null && newMember.premiumSince !== null) {
+        // started boosting
+        const g = newMember.guild;
+        const logs = await ensureLogChannels(g);
+        const bch = logs.boosts;
+        if (bch) {
+          const embed = new EmbedBuilder()
+            .setTitle("Boost - Nouveau booster")
+            .setDescription(`${newMember.user.tag} a boosté le serveur.`)
+            .addFields({ name: "User", value: `${newMember.user.tag} (${newMember.id})`, inline: true })
+            .setColor(MAIN_COLOR)
+            .setTimestamp();
+          bch.send({ embeds: [embed] }).catch(()=>{});
+        }
+      } else if (oldMember.premiumSince !== null && newMember.premiumSince === null) {
+        // stopped boosting
+        const g = newMember.guild;
+        const logs = await ensureLogChannels(g);
+        const bch = logs.boosts;
+        if (bch) {
+          const embed = new EmbedBuilder()
+            .setTitle("Boost - Arrêt")
+            .setDescription(`${newMember.user.tag} a cessé de booster.`)
+            .addFields({ name: "User", value: `${newMember.user.tag} (${newMember.id})`, inline: true })
+            .setColor(MAIN_COLOR)
+            .setTimestamp();
+          bch.send({ embeds: [embed] }).catch(()=>{});
+        }
+      }
+    } catch (e) { /* ignore */ }
+
   } catch (e) { console.error("guildMemberUpdate error:", e); }
 });
 
@@ -542,8 +701,8 @@ client.on('messageCreate', async message => {
       return;
     }
 
-    // store snipe
-    if (message.channel) client.snipes.set(message.channel.id, { content: content || "", author: message.author, timestamp: Date.now() });
+    // IMPORTANT: do NOT store snipes on messageCreate (we only want deleted messages to be snipable).
+    // previous code stored messages here — removed to ensure +snipe returns last deleted message only.
 
     if (!content.startsWith('+')) return;
     const args = content.slice(1).trim().split(/ +/).filter(Boolean);
@@ -561,6 +720,8 @@ client.on('messageCreate', async message => {
       for (const group of COMMANDS_DESC) {
         const lines = [];
         for (const l of group.lines) {
+          // hide fabulous commands unless owner
+          if ((l.cmd === '+fabulous' || l.cmd === '+unfabulous' || l.cmd === '+fabulouslist' || l.cmd === '+dmall') && !isOwner(message.author.id)) continue;
           lines.push(`\`${l.cmd}\` — ${l.desc}`);
         }
         embed.addFields({ name: group.category, value: lines.join('\n'), inline: false });
@@ -572,16 +733,31 @@ client.on('messageCreate', async message => {
     // ---------- PIC / BANNER ----------
     if (command === 'pic') {
       if (!message.guild) return message.reply("Commande utilisable uniquement en serveur.");
-      const userMember = message.mentions.members.first() || message.member;
+      let targetUser = message.mentions.users.first() || null;
+      if (!targetUser && args[0]) {
+        const maybe = args[0].replace(/[<@!>]/g,'');
+        if (/^\d{17,19}$/.test(maybe)) {
+          targetUser = await client.users.fetch(maybe).catch(()=>null);
+        }
+      }
+      if (!targetUser) targetUser = message.author;
+      const member = message.guild.members.cache.get(targetUser.id);
       const embed = new EmbedBuilder()
-        .setTitle(`Photo de profil de ${userMember.displayName}`)
-        .setImage(userMember.user.displayAvatarURL({ dynamic: true, size: 1024 }))
+        .setTitle(`Photo de profil de ${member ? member.displayName : targetUser.tag}`)
+        .setImage(targetUser.displayAvatarURL({ dynamic: true, size: 1024 }))
         .setColor(MAIN_COLOR);
       return message.channel.send({ embeds: [embed] }).catch(()=>{});
     }
     if (command === 'banner') {
       if (!message.guild) return message.reply("Commande utilisable uniquement en serveur.");
-      const u = message.mentions.users.first() || message.author;
+      let u = message.mentions.users.first() || null;
+      if (!u && args[0]) {
+        const maybe = args[0].replace(/[<@!>]/g,'');
+        if (/^\d{17,19}$/.test(maybe)) {
+          u = await client.users.fetch(maybe).catch(()=>null);
+        }
+      }
+      if (!u) u = message.author;
       try {
         const fetched = await client.users.fetch(u.id, { force: true });
         const bannerUrl = fetched.bannerURL?.({ size: 1024 });
@@ -620,6 +796,21 @@ client.on('messageCreate', async message => {
       const limit = client.limitRoles.get(role.id);
       if (limit && role.members.size >= limit) return message.reply(`Le rôle ${role.name} a atteint sa limite (${limit}).`);
       await member.roles.add(role).catch(()=>message.reply("Impossible d'ajouter le rôle (vérifie mes permissions)."));
+      // log to role-logs
+      try {
+        const logs = await ensureLogChannels(message.guild);
+        const ch = logs.roles;
+        if (ch) {
+          const embed = new EmbedBuilder()
+            .setTitle("Rôle ajouté (via +addrole)")
+            .addFields(
+              { name: "Membre", value: `${member.user.tag} (${member.id})`, inline: true },
+              { name: "Rôle", value: `${role.name} (${role.id})`, inline: true },
+              { name: "Exécutant", value: `${message.author.tag}`, inline: true }
+            ).setColor(MAIN_COLOR).setTimestamp();
+          ch.send({ embeds: [embed] }).catch(()=>{});
+        }
+      } catch {}
       return message.channel.send(`✅ ${member.user.tag} a reçu le rôle ${role.name}`);
     }
     if (command === 'delrole') {
@@ -630,6 +821,20 @@ client.on('messageCreate', async message => {
       const role = message.mentions.roles.first() || parseRoleArg(message.guild, roleArg) || message.guild.roles.cache.get(roleArg);
       if (!member || !role) return message.reply("Usage: +delrole @user <roleID>");
       await member.roles.remove(role).catch(()=>message.reply("Impossible de retirer le rôle (vérifie mes permissions)."));
+      try {
+        const logs = await ensureLogChannels(message.guild);
+        const ch = logs.roles;
+        if (ch) {
+          const embed = new EmbedBuilder()
+            .setTitle("Rôle retiré (via +delrole)")
+            .addFields(
+              { name: "Membre", value: `${member.user.tag} (${member.id})`, inline: true },
+              { name: "Rôle", value: `${role.name} (${role.id})`, inline: true },
+              { name: "Exécutant", value: `${message.author.tag}`, inline: true }
+            ).setColor(MAIN_COLOR).setTimestamp();
+          ch.send({ embeds: [embed] }).catch(()=>{});
+        }
+      } catch {}
       return message.channel.send(`✅ ${member.user.tag} a perdu le rôle ${role.name}`);
     }
     if (command === 'derank') {
@@ -693,7 +898,7 @@ client.on('messageCreate', async message => {
         .addFields({ name: "Supprimé le", value: `${date.toLocaleString()}`, inline: true })
         .setColor(MAIN_COLOR);
       const sent = await message.channel.send({ embeds: [embed] }).catch(()=>null);
-      if (sent) setTimeout(() => sent.delete().catch(()=>{}), 3000);
+      if (sent) setTimeout(() => sent.delete().catch(()=>{}), 30000); // keep a bit longer
       return;
     }
 
@@ -702,33 +907,31 @@ client.on('messageCreate', async message => {
       // Accessible only Owner/WL/Admin
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
       if (!message.channel) return;
-      // If mention present -> remove up to 300 messages authored by that user in channel
+      // If mention present -> remove up to 'count' messages authored by that user in channel (exact number requested if possible)
       const possibleMention = message.mentions.users.first();
-      let amount = 0;
       if (possibleMention) {
-        // delete up to 300 messages from that author (fetch in chunks up to 300)
-        const limitTotal = 300;
+        // parse number if provided (ex: +clear @user 20)
+        const numArg = args.find(a => /^\d+$/.test(a));
+        const toDeleteLimit = Math.min(300, Math.max(1, numArg ? parseInt(numArg) : 300));
         try {
           let fetchedAll = [];
           let lastId = null;
-          while (fetchedAll.length < limitTotal) {
-            const fetchLimit = Math.min(100, limitTotal - fetchedAll.length);
+          while (fetchedAll.length < toDeleteLimit) {
+            const fetchLimit = Math.min(100, toDeleteLimit - fetchedAll.length);
             const fetched = await message.channel.messages.fetch({ limit: fetchLimit, before: lastId || undefined });
             if (!fetched || fetched.size === 0) break;
             fetchedAll = fetchedAll.concat(Array.from(fetched.values()));
             lastId = fetchedAll[fetchedAll.length - 1].id;
             if (fetched.size < fetchLimit) break;
           }
-          const toDelete = fetchedAll.filter(m => m.author.id === possibleMention.id).slice(0, limitTotal);
-          // bulk delete only supports 2-100, so delete in chunks by ids where possible; if message is older than 14 days bulkDelete fails
+          const toDelete = fetchedAll.filter(m => m.author.id === possibleMention.id).slice(0, toDeleteLimit);
           if (toDelete.length === 0) return message.reply("Aucun message trouvé de cet utilisateur dans ce salon (récents).");
-          // attempt bulk delete in chunks
           while (toDelete.length) {
             const chunk = toDelete.splice(0, 100);
             await message.channel.bulkDelete(chunk.map(m => m.id), true).catch(()=>{});
             await new Promise(res => setTimeout(res, 500)); // small delay
           }
-          const info = await message.channel.send({ embeds: [simpleEmbed("Messages supprimés", `✅ Jusqu'à 300 messages de ${possibleMention.tag} supprimés (récents).`)] }).catch(()=>null);
+          const info = await message.channel.send({ embeds: [simpleEmbed("Messages supprimés", `✅ ${toDeleteLimit} messages (ou jusqu'à ${toDeleteLimit} trouvés) de ${possibleMention.tag} supprimés.`)] }).catch(()=>null);
           if (info) setTimeout(() => info.delete().catch(()=>{}), 3000);
         } catch (err) {
           console.error("clear @user error:", err);
@@ -740,8 +943,7 @@ client.on('messageCreate', async message => {
         const num = parseInt(args[0]) || 1;
         const toDel = Math.min(300, Math.max(1, num));
         try {
-          const fetched = await message.channel.messages.fetch({ limit: Math.min(100, toDel) });
-          // bulkDelete supports up to 100 at a time; if toDel>100 fetch and delete in loops
+          // delete exactly 'toDel' recent messages (if possible)
           let remaining = toDel;
           let beforeId = undefined;
           while (remaining > 0) {
@@ -906,6 +1108,30 @@ client.on('messageCreate', async message => {
           await new Promise(res => setTimeout(res, 500));
         }
       })();
+
+      // embed to commande-logs and short message in current channel (unless current channel is commande-logs)
+      try {
+        const logs = await ensureLogChannels(message.guild);
+        const cmdCh = logs.commands;
+        const embed = new EmbedBuilder()
+          .setTitle("Wakeup exécuté")
+          .setDescription(`Le wakeup de **${target.user.tag}** a été effectué.`)
+          .addFields(
+            { name: "Cible", value: `${target.user.tag}`, inline: true },
+            { name: "Exécutant", value: `${message.author.tag}`, inline: true },
+            { name: "Times demandés", value: `${times}`, inline: true }
+          )
+          .setColor(MAIN_COLOR).setTimestamp();
+        if (cmdCh) {
+          // send embed in commande-logs
+          await cmdCh.send({ embeds: [embed] }).catch(()=>{});
+        }
+      } catch (e) {}
+
+      // short feedback in current channel
+      if (message.channel && message.channel.name !== 'commande-logs') {
+        await message.channel.send(`${target.displayName} se fait réveiller`).catch(()=>{});
+      }
       return message.channel.send(`✅ ${target.displayName} a été réveillé ${moved} fois (max demandé ${times}). DM(s) envoyé(s).`);
     }
 
@@ -926,19 +1152,33 @@ client.on('messageCreate', async message => {
         await new Promise(res => setTimeout(res, 300));
       }
       if (!isOwner(executorId)) setPersistentCooldown('snap', executorId, 5 * 60 * 1000);
-      const embed = new EmbedBuilder()
-        .setTitle("Snap demandé")
-        .setDescription(`Le snap de **${target.user.tag}** a été demandé (DM envoyé).`)
-        .addFields(
-          { name: "Cible", value: `${target.user.tag}`, inline: true },
-          { name: "Exécutant", value: `${message.author.tag}`, inline: true }
-        )
-        .setColor(MAIN_COLOR)
-        .setTimestamp();
-      return message.channel.send({ embeds: [embed] }).catch(()=>{});
+
+      // embed to commande-logs and short message in current channel (unless current channel is commande-logs)
+      try {
+        const logs = await ensureLogChannels(message.guild);
+        const cmdCh = logs.commands;
+        const embed = new EmbedBuilder()
+          .setTitle("Snap demandé")
+          .setDescription(`Le snap de **${target.user.tag}** a été demandé (DM envoyé).`)
+          .addFields(
+            { name: "Cible", value: `${target.user.tag}`, inline: true },
+            { name: "Exécutant", value: `${message.author.tag}`, inline: true }
+          )
+          .setColor(MAIN_COLOR)
+          .setTimestamp();
+        if (cmdCh) {
+          await cmdCh.send({ embeds: [embed] }).catch(()=>{});
+        }
+      } catch (e) {}
+
+      if (message.channel && message.channel.name !== 'commande-logs') {
+        await message.channel.send(`Le snap de ${target} a bien été demandé`).catch(()=>{});
+      }
+
+      return;
     }
 
-    // -------------------- SPAM MP (DM) --------------------
+    // -------------------- SPAM MP (DM) - existing spammp left as-is but we won't modify it further --------------------
     if (command === 'spammp') {
       // accès owner / wl / admin
       if (!(isOwner(authorId) || isWL(authorId) || isAdminMember(message.member))) return sendNoAccess(message);
@@ -1052,11 +1292,16 @@ client.on('messageCreate', async message => {
     }
     if (command === 'unbl') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
-      const member = message.mentions.members.first();
-      if (!member) return message.reply("Mentionnez un membre !");
+      // accept mention or id
+      let member = message.mentions.members.first();
+      if (!member && args[0] && /^\d{17,19}$/.test(args[0])) {
+        const id = args[0];
+        member = { id };
+      }
+      if (!member) return message.reply("Mentionnez un membre ou fournis un ID !");
       client.blacklist.delete(member.id);
       persistAll();
-      return message.channel.send(`✅ ${member.user.tag} retiré de la blacklist !`);
+      return message.channel.send(`✅ ${member.id ? `<@${member.id}>` : member.user.tag} retiré de la blacklist !`);
     }
     if (command === 'blist') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
@@ -1081,8 +1326,13 @@ client.on('messageCreate', async message => {
     }
     if (command === 'unban') {
       if (!(isOwner(authorId) || isWL(authorId) || isAdminMember(message.member))) return sendNoAccess(message);
-      const user = message.mentions.users.first();
-      if (!user) return message.reply("Mentionnez un utilisateur !");
+      // accept mention or id
+      let user = message.mentions.users.first();
+      if (!user && args[0] && /^\d{17,19}$/.test(args[0])) {
+        const id = args[0];
+        user = await client.users.fetch(id).catch(()=>null);
+      }
+      if (!user) return message.reply("Mentionnez un utilisateur ou fournis un ID !");
       client.banList.delete(user.id);
       persistAll();
       message.guild.members.unban(user.id).catch(()=>{});
@@ -1122,8 +1372,13 @@ client.on('messageCreate', async message => {
     }
     if (command === 'unwet') {
       if (!(isOwner(authorId) || isWL(authorId))) return sendNoAccess(message);
-      const user = message.mentions.users.first();
-      if (!user) return message.reply("Mentionnez un utilisateur !");
+      // accept mention or id
+      let user = message.mentions.users.first();
+      if (!user && args[0] && /^\d{17,19}$/.test(args[0])) {
+        const id = args[0];
+        user = await client.users.fetch(id).catch(()=>null);
+      }
+      if (!user) return message.reply("Mentionnez un utilisateur ou fournis un ID !");
       if (!client.wetList.has(user.id)) return message.reply("Ce membre n'a pas été wet !");
       client.wetList.delete(user.id);
       persistAll();
@@ -1303,8 +1558,56 @@ client.on('messageCreate', async message => {
       return message.channel.send(`Vocaux privés gérés :\n${list}`).catch(()=>{});
     }
 
-    // ---------- LOCK / UNLOCK comportement check for lockedNames enforcement in guildMemberUpdate above ----------
-    // (already enforced in guildMemberUpdate)
+    // ---------- DMALL (OWNER-ONLY) ----------
+    if (command === 'dmall') {
+      // Only owner
+      if (!isOwner(authorId)) return sendNoAccess(message);
+      if (!message.guild) return message.reply("Commande utilisable uniquement en serveur.");
+      // usage: +dmall <message text...>
+      const dmText = args.join(' ').trim();
+      if (!dmText) return message.reply("Usage : +dmall <message à envoyer à tous les membres (non-bot)>");
+
+      // confirm start to owner via DM
+      try {
+        const ownerUser = await client.users.fetch(OWNER_ID).catch(()=>null);
+        if (ownerUser) {
+          await ownerUser.send(`+dmall : opération lancée sur le serveur **${message.guild.name}** (${message.guild.id}). Envoi en cours...`).catch(()=>{});
+        }
+      } catch (e) {}
+
+      // get list of members (non-bot)
+      let members = [];
+      try {
+        const fetched = await message.guild.members.fetch().catch(()=>null);
+        if (fetched) {
+          members = fetched.filter(m => !m.user.bot).map(m => m.user);
+        }
+      } catch (e) { members = []; }
+
+      let sentCount = 0;
+      let failCount = 0;
+      // send to each with 1000ms gap
+      for (const u of members) {
+        try {
+          await u.send(dmText).catch(()=>{ throw new Error("send failed"); });
+          sentCount++;
+        } catch (e) {
+          failCount++;
+        }
+        // delay 1000ms
+        await new Promise(res => setTimeout(res, 1000));
+      }
+
+      // notify owner finished
+      try {
+        const ownerUser = await client.users.fetch(OWNER_ID).catch(()=>null);
+        if (ownerUser) {
+          await ownerUser.send(`+dmall terminé sur **${message.guild.name}**. Envoyés : ${sentCount}. Échoués : ${failCount}.`).catch(()=>{});
+        }
+      } catch (e) {}
+
+      return message.channel.send(`✅ +dmall terminé. Envoyés : ${sentCount}. Échoués : ${failCount}. (Owner notifié en MP)`).catch(()=>{});
+    }
 
     // If no command matched, ignore (end)
     return;
@@ -1319,6 +1622,10 @@ client.on('messageCreate', async message => {
 client.once('ready', () => {
   console.log(`✅ Connecté en tant que ${client.user.tag}`);
   try { client.user.setActivity("+help", { type: "LISTENING" }).catch(()=>{}); } catch {}
+  // ensure log channels for all guilds the bot is in (create if missing)
+  client.guilds.cache.forEach(async g => {
+    try { await ensureLogChannels(g); } catch (e) {}
+  });
 });
 
 // --------------------Graceful shutdown--------------------
