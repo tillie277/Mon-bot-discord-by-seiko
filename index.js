@@ -780,19 +780,16 @@ client.on('messageCreate', async message => {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
       if (!message.guild) return message.reply("Commande utilisable uniquement en serveur.");
 
-      // args[0] = mention ou id de la cible ; reste = message
-      const targetMention = args[0];
-      if (!targetMention) return message.reply("Usage: +say @cible <message>");
-      // resolve member (mention or id)
-      let targetMember = message.mentions.members.first() || null;
-      if (!targetMember) {
-        const possibleId = targetMention.replace(/[<@!>]/g,'');
-        if (/^\\d{17,19}$/.test(possibleId)) {
-          targetMember = await message.guild.members.fetch(possibleId).catch(()=>null);
-        }
+      // args[0] = mention or ID of the target; the rest is the message.
+      if (!args[0]) return message.reply("Usage: +say @cible|<ID> <message>");
+      // resolve member robustly (mention or id) using helper parseMemberArg; fallback to fetching by id
+      let targetMember = parseMemberArg(message.guild, args[0]);
+      if (!targetMember && /^\d{17,19}$/.test(args[0])) {
+        targetMember = await message.guild.members.fetch(args[0]).catch(()=>null);
       }
       if (!targetMember) return message.reply("Cible introuvable (mentionne-la ou donne son ID).");
 
+      // message is everything after the first argument
       const sayText = args.slice(1).join(' ').trim();
       if (!sayText) return message.reply("Fournis un message à envoyer.");
 
@@ -1044,8 +1041,12 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
     if (command === 'undog') {
       if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
       if (!message.guild) return message.reply("Commande en serveur uniquement.");
-      const member = message.mentions.members.first();
-      if (!member) return message.reply("Mentionnez un membre !");
+      // accept mention OR ID
+      let member = parseMemberArg(message.guild, args[0]) || (args[0] && message.guild.members.cache.get(args[0])) || null;
+      if (!member && args[0] && /^\d{17,19}$/.test(args[0])) {
+        member = await message.guild.members.fetch(args[0]).catch(()=>null);
+      }
+      if (!member) return message.reply("Mentionnez un membre ou donnez son ID !");
       if (!client.dogs.has(member.id)) return message.reply("Ce membre n'est pas en laisse !");
       const info = client.dogs.get(member.id);
       // Only executor, admins or owner can undog
