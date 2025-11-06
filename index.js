@@ -712,6 +712,60 @@ client.on('messageCreate', async message => {
     // ---------- PING ----------
     if (command === 'ping') {
       return message.channel.send("ta cru j’étais off btrd?").catch(()=>{});
+
+    // ---------- SAY (parodie marquée par ⃟, safe) ----------
+    if (command === 'say') {
+      // restreint : Owner / WL / Admin seulement
+      if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
+      if (!message.guild) return message.reply("Commande utilisable uniquement en serveur.");
+
+      // args[0] = mention ou id de la cible ; reste = message
+      const targetMention = args[0];
+      if (!targetMention) return message.reply("Usage: +say @cible <message>");
+      // resolve member (mention or id)
+      let targetMember = message.mentions.members.first() || null;
+      if (!targetMember) {
+        const possibleId = targetMention.replace(/[<@!>]/g,'');
+        if (/^\\d{17,19}$/.test(possibleId)) {
+          targetMember = await message.guild.members.fetch(possibleId).catch(()=>null);
+        }
+      }
+      if (!targetMember) return message.reply("Cible introuvable (mentionne-la ou donne son ID).");
+
+      const sayText = args.slice(1).join(' ').trim();
+      if (!sayText) return message.reply("Fournis un message à envoyer.");
+
+      try {
+        // Prépare nom et avatar (marqués par le symbole ⃟ pour indiquer une parodie)
+        const webhookName = `${targetMember.displayName} ⃟`;
+        const avatarUrl = targetMember.user.displayAvatarURL({ extension: 'png', size: 1024 });
+
+        // Crée webhook temporaire dans le salon courant
+        const chan = message.channel;
+        const webhook = await chan.createWebhook({ name: webhookName, avatar: avatarUrl, reason: `+say parodie (⃟) par ${message.author.tag}` }).catch(()=>null);
+        if (!webhook) {
+          return message.reply("Impossible de créer un webhook ici (vérifie mes permissions).");
+        }
+
+        // Envoie via webhook : on marque explicitement le message comme parodie avec le symbole ⃟
+        const contentToSend = `⃟ [envoyé par ${message.author.tag}] ${sayText}`;
+        await webhook.send({
+          content: contentToSend,
+          username: webhookName,
+          avatarURL: avatarUrl,
+          allowedMentions: { parse: [] } // empêche ping involontaire
+        }).catch(()=>{});
+
+        // Nettoyage : supprime le webhook (best-effort)
+        try { await webhook.delete(`Cleanup after +say (⃟) by ${message.author.tag}`); } catch(e){}
+
+        // Ack transparent
+        return message.channel.send({ embeds: [simpleEmbed("✅ +say (⃟)", `Message envoyé en tant que *${targetMember.displayName} ⃟* — clairement marqué comme une parodie.`)] }).then(m => setTimeout(()=>m.delete().catch(()=>{}), 4000)).catch(()=>{});
+      } catch (err) {
+        console.error("Erreur +say:", err);
+        return message.reply("Erreur lors de l'exécution de +say.");
+      }
+    }
     }
 
     // ---------- HELP ----------
