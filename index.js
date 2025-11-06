@@ -134,7 +134,7 @@ const isAdminMember = member => {
   } catch { return false; }
 };
 const simpleEmbed = (title, desc) => new EmbedBuilder().setTitle(title).setDescription(desc).setColor(MAIN_COLOR);
-const sendNoAccess = msg => msg.channel.send({ embeds: [simpleEmbed("Accès refusé", `${msg.author}, tu n'as pas accès à cette commande !`)] }).catch(()=>{});
+const sendNoAccess = msg => msg.channel.send({ embeds: [simpleEmbed("AccÃ¨s refusÃ©", `${msg.author}, tu n'as pas accÃ¨s Ã  cette commande !`)] }).catch(()=>{});
 const isOnPersistentCooldown = (type, id) => {
   try {
     if (!persistentCooldowns[type]) return false;
@@ -189,7 +189,7 @@ async function ensureLogChannels(guild) {
       else {
         // attempt to create (only if bot has manage channels)
         try {
-          const created = await guild.channels.create({ name, type: ChannelType.GuildText, reason: 'Création salons logs par bot' }).catch(()=>null);
+          const created = await guild.channels.create({ name, type: ChannelType.GuildText, reason: 'CrÃ©ation salons logs par bot' }).catch(()=>null);
           out[k] = created || null;
         } catch (e) { out[k] = null; }
       }
@@ -347,7 +347,7 @@ client.on('messageDelete', async message => {
         const ch = logs.messages;
         if (ch) {
           const embed = new EmbedBuilder()
-            .setTitle("Message supprimé")
+            .setTitle("Message supprimÃ©")
             .addFields(
               { name: "Auteur", value: `${message.author.tag} (${message.author.id})`, inline: true },
               { name: "Salon", value: `${message.channel.name} (${message.channel.id})`, inline: true },
@@ -374,12 +374,12 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
         const ch = logs.messages;
         if (ch) {
           const embed = new EmbedBuilder()
-            .setTitle("Message modifié")
+            .setTitle("Message modifiÃ©")
             .addFields(
               { name: "Auteur", value: `${oldMessage.author.tag} (${oldMessage.author.id})`, inline: true },
               { name: "Salon", value: `${oldMessage.channel.name} (${oldMessage.channel.id})`, inline: true },
               { name: "Avant", value: oldMessage.content ? (oldMessage.content.length > 1024 ? oldMessage.content.slice(0,1000)+"..." : oldMessage.content) : "(vide)" },
-              { name: "Après", value: newMessage.content ? (newMessage.content.length > 1024 ? newMessage.content.slice(0,1000)+"..." : newMessage.content) : "(vide)" }
+              { name: "AprÃ¨s", value: newMessage.content ? (newMessage.content.length > 1024 ? newMessage.content.slice(0,1000)+"..." : newMessage.content) : "(vide)" }
             )
             .setColor(MAIN_COLOR)
             .setTimestamp();
@@ -395,12 +395,12 @@ client.on('guildMemberAdd', async member => {
     // blacklist: kick after 3s if rejoin
     if (client.blacklist.has(member.id)) {
       setTimeout(async () => {
-        try { await member.kick("Membre blacklisté (auto kick on join)"); } catch {}
+        try { await member.kick("Membre blacklistÃ© (auto kick on join)"); } catch {}
       }, 3000);
       return;
     }
     if (client.antibot && member.user.bot) {
-      await member.kick("Anti-bot activé").catch(()=>{});
+      await member.kick("Anti-bot activÃ©").catch(()=>{});
       return;
     }
     // anti-raid basic
@@ -416,12 +416,12 @@ client.on('guildMemberAdd', async member => {
         if (members) {
           for (const [id, m] of members) {
             if (now - (m.joinedTimestamp || 0) < 15000 && !m.permissions.has(PermissionsBitField.Flags.Administrator)) {
-              try { await m.kick("Anti-raid: joins massifs détectés").catch(()=>{}); } catch {}
+              try { await m.kick("Anti-raid: joins massifs dÃ©tectÃ©s").catch(()=>{}); } catch {}
             }
           }
         }
         if (client.raidlog && member.guild.systemChannel) {
-          const embed = new EmbedBuilder().setTitle("Anti-raid activé").setDescription("Joins massifs détectés. Actions prises automatiquement.").setColor(MAIN_COLOR).setTimestamp();
+          const embed = new EmbedBuilder().setTitle("Anti-raid activÃ©").setDescription("Joins massifs dÃ©tectÃ©s. Actions prises automatiquement.").setColor(MAIN_COLOR).setTimestamp();
           member.guild.systemChannel.send({ embeds: [embed] }).catch(()=>{});
         }
       }
@@ -456,10 +456,10 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         for (const r of newMember.roles.cache.values()) {
           if (!oldRoles.has(r.id)) {
             const embed = new EmbedBuilder()
-              .setTitle("Rôle ajouté")
+              .setTitle("RÃ´le ajoutÃ©")
               .addFields(
                 { name: "Membre", value: `${newMember.user.tag} (${newMember.id})`, inline:true },
-                { name: "Rôle", value: `${r.name} (${r.id})`, inline:true },
+                { name: "RÃ´le", value: `${r.name} (${r.id})`, inline:true },
                 { name: "Heure", value: new Date().toLocaleString(), inline: false }
               )
               .setColor(MAIN_COLOR)
@@ -472,10 +472,10 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
           if (!newRoles.has(rId)) {
             const r = oldMember.guild.roles.cache.get(rId);
             const embed = new EmbedBuilder()
-              .setTitle("Rôle retiré")
+              .setTitle("RÃ´le retirÃ©")
               .addFields(
                 { name: "Membre", value: `${newMember.user.tag} (${newMember.id})`, inline:true },
-                { name: "Rôle", value: `${r ? r.name : rId} (${rId})`, inline:true },
+                { name: "RÃ´le", value: `${r ? r.name : rId} (${rId})`, inline:true },
                 { name: "Heure", value: new Date().toLocaleString(), inline: false }
               )
               .setColor(MAIN_COLOR)
@@ -496,7 +496,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         if (bch) {
           const embed = new EmbedBuilder()
             .setTitle("Boost - Nouveau booster")
-            .setDescription(`${newMember.user.tag} a boosté le serveur.`)
+            .setDescription(`${newMember.user.tag} a boostÃ© le serveur.`)
             .addFields({ name: "User", value: `${newMember.user.tag} (${newMember.id})`, inline: true })
             .setColor(MAIN_COLOR)
             .setTimestamp();
@@ -509,8 +509,8 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         const bch = logs.boosts;
         if (bch) {
           const embed = new EmbedBuilder()
-            .setTitle("Boost - Arrêt")
-            .setDescription(`${newMember.user.tag} a cessé de booster.`)
+            .setTitle("Boost - ArrÃªt")
+            .setDescription(`${newMember.user.tag} a cessÃ© de booster.`)
             .addFields({ name: "User", value: `${newMember.user.tag} (${newMember.id})`, inline: true })
             .setColor(MAIN_COLOR)
             .setTimestamp();
@@ -561,17 +561,17 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 const COMMANDS_DESC = [
   { category: "GENERAL", lines: [
     { cmd: "+help", desc: "Affiche la liste courte (Owner/WL/Admin)", access: "all" },
-    { cmd: "+ping", desc: "Répond 'ta cru j’étais off btrd?'", access: "all" }
+    { cmd: "+ping", desc: "RÃ©pond 'ta cru jâÃ©tais off btrd?'", access: "all" }
   ]},
   { category: "ROLES", lines: [
     { cmd: "+pic @user", desc: "Affiche avatar (all)", access: "all" },
-    { cmd: "+banner @user", desc: "Affiche bannière (all)", access: "all" },
-    { cmd: "+addrole @user roleID", desc: "Ajoute un rôle (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+delrole @user roleID", desc: "Retire un rôle (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+derank @user", desc: "Retire tous les rôles (Owner/WL/Admin)", access: "admin" }
+    { cmd: "+banner @user", desc: "Affiche banniÃ¨re (all)", access: "all" },
+    { cmd: "+addrole @user roleID", desc: "Ajoute un rÃ´le (Owner/WL/Admin)", access: "admin" },
+    { cmd: "+delrole @user roleID", desc: "Retire un rÃ´le (Owner/WL/Admin)", access: "admin" },
+    { cmd: "+derank @user", desc: "Retire tous les rÃ´les (Owner/WL/Admin)", access: "admin" }
   ]},
   { category: "LIMIT ROLES", lines: [
-    { cmd: "+limitrole @role <max>", desc: "Limite rôle (Owner/WL)", access: "wl" },
+    { cmd: "+limitrole @role <max>", desc: "Limite rÃ´le (Owner/WL)", access: "wl" },
     { cmd: "+unlimitrole @role", desc: "Supprime limite (Owner/WL)", access: "wl" }
   ]},
   { category: "ANTIS", lines: [
@@ -582,46 +582,46 @@ const COMMANDS_DESC = [
     { cmd: "+raidlog", desc: "Toggle log anti-raid (Owner/WL/Admin)", access: "admin" }
   ]},
   { category: "MISC", lines: [
-    { cmd: "+clear @user | +clear <amount>", desc: "Supprime messages: @ -> tout (≤300), nombre ≤300 (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+slowmode <s>", desc: "Définit slowmode (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+serverpic", desc: "Affiche icône serveur (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+serverbanner", desc: "Affiche bannière serveur (Owner/WL/Admin)", access: "admin" }
+    { cmd: "+clear @user | +clear <amount>", desc: "Supprime messages: @ -> tout (â¤300), nombre â¤300 (Owner/WL/Admin)", access: "admin" },
+    { cmd: "+slowmode <s>", desc: "DÃ©finit slowmode (Owner/WL/Admin)", access: "admin" },
+    { cmd: "+serverpic", desc: "Affiche icÃ´ne serveur (Owner/WL/Admin)", access: "admin" },
+    { cmd: "+serverbanner", desc: "Affiche banniÃ¨re serveur (Owner/WL/Admin)", access: "admin" }
   ]},
   { category: "DOG", lines: [
     { cmd: "+dog @user", desc: "Verrouille pseudo + met laisse (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+undog @user", desc: "Libère un dog (exécuteur/Owner/Admin)", access: "admin" },
-    { cmd: "+undogall", desc: "Libère tous les dogs (Owner/WL/Admin)", access: "admin" },
+    { cmd: "+undog @user", desc: "LibÃ¨re un dog (exÃ©cuteur/Owner/Admin)", access: "admin" },
+    { cmd: "+undogall", desc: "LibÃ¨re tous les dogs (Owner/WL/Admin)", access: "admin" },
     { cmd: "+doglist", desc: "Liste dogs (Owner/WL/Admin)", access: "admin" }
   ]},
   { category: "MOVE / PERM / WAKEUP", lines: [
-    { cmd: "+mv @user", desc: "Déplace en vocal (perm_mv/Owner/WL/Admin)", access: "perm_mv" },
+    { cmd: "+mv @user", desc: "DÃ©place en vocal (perm_mv/Owner/WL/Admin)", access: "perm_mv" },
     { cmd: "+permv @user", desc: "Donne droit +mv (Owner/WL/Admin)", access: "admin" },
     { cmd: "+unpermv @user", desc: "Retire droit +mv (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+permvlist", desc: "Liste autorisés +mv (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+wakeup @user <times>", desc: "Déplace plusieurs fois + DM (Owner/WL/Admin)", access: "admin" }
+    { cmd: "+permvlist", desc: "Liste autorisÃ©s +mv (Owner/WL/Admin)", access: "admin" },
+    { cmd: "+wakeup @user <times>", desc: "DÃ©place plusieurs fois + DM (Owner/WL/Admin)", access: "admin" }
   ]},
   { category: "SNIPE / SNAP", lines: [
-    { cmd: "+snipe", desc: "Affiche dernier message supprimé (all)", access: "all" },
+    { cmd: "+snipe", desc: "Affiche dernier message supprimÃ© (all)", access: "all" },
     { cmd: "+snap @user", desc: "Envoie 5 DM (Owner/WL/Admin)", access: "admin" }
   ]},
-  { category: "LISTES / MODÉRATION", lines: [
+  { category: "LISTES / MODÃRATION", lines: [
     { cmd: "+wl @user / +unwl / +wlist", desc: "Whitelist (Owner only)", access: "owner" },
     { cmd: "+bl @user / +unbl / +blist", desc: "Blacklist & kick (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+ban / +unban / +banlist", desc: "Bannir / débannir (Owner/WL/Admin)", access: "admin" },
-    { cmd: "+unbanall", desc: "Débannir tous (Owner/WL)", access: "owner_wl" },
-    { cmd: "+wet / +unwet / +wetlist", desc: "Wet = ban spécial (Owner/WL)", access: "wl" }
+    { cmd: "+ban / +unban / +banlist", desc: "Bannir / dÃ©bannir (Owner/WL/Admin)", access: "admin" },
+    { cmd: "+unbanall", desc: "DÃ©bannir tous (Owner/WL)", access: "owner_wl" },
+    { cmd: "+wet / +unwet / +wetlist", desc: "Wet = ban spÃ©cial (Owner/WL)", access: "wl" }
   ]},
   { category: "TEXT LOCK", lines: [
     { cmd: "+lock", desc: "Verrouille salon texte (Owner/WL/Admin)", access: "owner_wl_admin" },
-    { cmd: "+unlock", desc: "Déverrouille salon texte (Owner/WL/Admin)", access: "owner_wl_admin" }
+    { cmd: "+unlock", desc: "DÃ©verrouille salon texte (Owner/WL/Admin)", access: "owner_wl_admin" }
   ]},
   { category: "VOICE PRIVATE (PV)", lines: [
-    { cmd: "+pv", desc: "Toggle privé/public du vocal où tu es (Owner/WL/Admin)", access: "owner_wl_admin" },
-    { cmd: "+pvacces @/ID", desc: "Donne accès au vocal privé (Owner/WL/Admin)", access: "owner_wl_admin" },
-    { cmd: "+delacces @/ID", desc: "Retire accès au vocal privé (Owner/WL/Admin)", access: "owner_wl_admin" },
-    { cmd: "+accesall", desc: "Donne accès à tous dans la voc (Owner/WL/Admin)", access: "owner_wl_admin" },
+    { cmd: "+pv", desc: "Toggle privÃ©/public du vocal oÃ¹ tu es (Owner/WL/Admin)", access: "owner_wl_admin" },
+    { cmd: "+pvacces @/ID", desc: "Donne accÃ¨s au vocal privÃ© (Owner/WL/Admin)", access: "owner_wl_admin" },
+    { cmd: "+delacces @/ID", desc: "Retire accÃ¨s au vocal privÃ© (Owner/WL/Admin)", access: "owner_wl_admin" },
+    { cmd: "+accesall", desc: "Donne accÃ¨s Ã  tous dans la voc (Owner/WL/Admin)", access: "owner_wl_admin" },
     { cmd: "+unpvall", desc: "Rend publics tous les vocaux rendus pv (Owner/WL/Admin)", access: "owner_wl_admin" },
-    { cmd: "+pvlist", desc: "Liste vocaux privés gérés (Owner/WL/Admin)", access: "owner_wl_admin" }
+    { cmd: "+pvlist", desc: "Liste vocaux privÃ©s gÃ©rÃ©s (Owner/WL/Admin)", access: "owner_wl_admin" }
   ]}
 ];
 
@@ -685,7 +685,7 @@ client.on('messageCreate', async message => {
       const isSpammer = recordMessageForSpam(authorId);
       if (isSpammer) {
         try { await message.delete().catch(()=>{}); } catch {}
-        const warn = simpleEmbed("Spam détecté", `${message.author}, tu envoies trop de messages d'affilé — cesse s'il te plaît.`);
+        const warn = simpleEmbed("Spam dÃ©tectÃ©", `${message.author}, tu envoies trop de messages d'affilÃ© â cesse s'il te plaÃ®t.`);
         const sent = await message.channel.send({ embeds: [warn] }).catch(()=>null);
         if (sent) setTimeout(() => sent.delete().catch(()=>{}), 2000);
         return;
@@ -702,7 +702,7 @@ client.on('messageCreate', async message => {
     }
 
     // IMPORTANT: do NOT store snipes on messageCreate (we only want deleted messages to be snipable).
-    // previous code stored messages here — removed to ensure +snipe returns last deleted message only.
+    // previous code stored messages here â removed to ensure +snipe returns last deleted message only.
 
     if (!content.startsWith('+')) return;
     const args = content.slice(1).trim().split(/ +/).filter(Boolean);
@@ -711,7 +711,7 @@ client.on('messageCreate', async message => {
 
     // ---------- PING ----------
     if (command === 'ping') {
-      return message.channel.send("ta cru j’étais off btrd?").catch(()=>{});
+      return message.channel.send("ta cru jâÃ©tais off btrd?").catch(()=>{});
 
     
     }
@@ -724,7 +724,7 @@ client.on('messageCreate', async message => {
         for (const l of group.lines) {
           // hide fabulous commands unless owner
           if ((l.cmd === '+fabulous' || l.cmd === '+unfabulous' || l.cmd === '+fabulouslist' || l.cmd === '+dmall') && !isOwner(message.author.id)) continue;
-          lines.push(`\`${l.cmd}\` — ${l.desc}`);
+          lines.push(`\`${l.cmd}\` â ${l.desc}`);
         }
         embed.addFields({ name: group.category, value: lines.join('\n'), inline: false });
       }
@@ -763,65 +763,68 @@ client.on('messageCreate', async message => {
       try {
         const fetched = await client.users.fetch(u.id, { force: true });
         const bannerUrl = fetched.bannerURL?.({ size: 1024 });
-        if (!bannerUrl) return message.reply("Ce membre n'a pas de bannière !");
-        const embed = new EmbedBuilder().setTitle(`Bannière de ${u.tag}`).setImage(bannerUrl).setColor(MAIN_COLOR);
+        if (!bannerUrl) return message.reply("Ce membre n'a pas de banniÃ¨re !");
+        const embed = new EmbedBuilder().setTitle(`BanniÃ¨re de ${u.tag}`).setImage(bannerUrl).setColor(MAIN_COLOR);
         return message.channel.send({ embeds: [embed] }).catch(()=>{});
       } catch (e) {
-        return message.reply("Erreur lors de la récupération de la bannière.");
+        return message.reply("Erreur lors de la rÃ©cupÃ©ration de la banniÃ¨re.");
       }
     }
 
     // ---------- SERVER PIC / BANNER ----------
     if ((command === 'serverpic' || command === 'serverban
 
-// ---------- SAY (parodie marquée par ⃟, safe) ----------
+// ---------- SAY (parodie marquÃ©e par â, safe) ----------
     if (command === 'say') {
       // restreint : Owner / WL / Admin seulement
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
       if (!message.guild) return message.reply("Commande utilisable uniquement en serveur.");
 
-      // args[0] = mention or ID of the target; the rest is the message.
-      if (!args[0]) return message.reply("Usage: +say @cible|<ID> <message>");
-      // resolve member robustly (mention or id) using helper parseMemberArg; fallback to fetching by id
-      let targetMember = parseMemberArg(message.guild, args[0]);
-      if (!targetMember && /^\d{17,19}$/.test(args[0])) {
-        targetMember = await message.guild.members.fetch(args[0]).catch(()=>null);
+      // args[0] = mention ou id de la cible ; reste = message
+      const targetMention = args[0];
+      if (!targetMention) return message.reply("Usage: +say @cible <message>");
+      // resolve member (mention or id)
+      let targetMember = message.mentions.members.first() || null;
+      if (!targetMember) {
+        const possibleId = targetMention.replace(/[<@!>]/g,'');
+        if (/^\\d{17,19}$/.test(possibleId)) {
+          targetMember = await message.guild.members.fetch(possibleId).catch(()=>null);
+        }
       }
       if (!targetMember) return message.reply("Cible introuvable (mentionne-la ou donne son ID).");
 
-      // message is everything after the first argument
       const sayText = args.slice(1).join(' ').trim();
-      if (!sayText) return message.reply("Fournis un message à envoyer.");
+      if (!sayText) return message.reply("Fournis un message Ã  envoyer.");
 
       try {
-        // Prépare nom et avatar (marqués par le symbole ⃟ pour indiquer une parodie)
-        const webhookName = `${targetMember.displayName} ⃟`;
+        // PrÃ©pare nom et avatar (marquÃ©s par le symbole â pour indiquer une parodie)
+        const webhookName = `${targetMember.displayName} â`;
         const avatarUrl = targetMember.user.displayAvatarURL({ extension: 'png', size: 1024 });
 
-        // Crée webhook temporaire dans le salon courant
+        // CrÃ©e webhook temporaire dans le salon courant
         const chan = message.channel;
-        const webhook = await chan.createWebhook({ name: webhookName, avatar: avatarUrl, reason: `+say parodie (⃟) par ${message.author.tag}` }).catch(()=>null);
+        const webhook = await chan.createWebhook({ name: webhookName, avatar: avatarUrl, reason: `+say parodie (â) par ${message.author.tag}` }).catch(()=>null);
         if (!webhook) {
-          return message.reply("Impossible de créer un webhook ici (vérifie mes permissions).");
+          return message.reply("Impossible de crÃ©er un webhook ici (vÃ©rifie mes permissions).");
         }
 
-        // Envoie via webhook : on marque explicitement le message comme parodie avec le symbole ⃟
-        const contentToSend = `⃟ [envoyé par ${message.author.tag}] ${sayText}`;
+        // Envoie via webhook : on marque explicitement le message comme parodie avec le symbole â
+        const contentToSend = `â [envoyÃ© par ${message.author.tag}] ${sayText}`;
         await webhook.send({
           content: contentToSend,
           username: webhookName,
           avatarURL: avatarUrl,
-          allowedMentions: { parse: [] } // empêche ping involontaire
+          allowedMentions: { parse: [] } // empÃªche ping involontaire
         }).catch(()=>{});
 
         // Nettoyage : supprime le webhook (best-effort)
-        try { await webhook.delete(`Cleanup after +say (⃟) by ${message.author.tag}`); } catch(e){}
+        try { await webhook.delete(`Cleanup after +say (â) by ${message.author.tag}`); } catch(e){}
 
         // Ack transparent
-        return message.channel.send({ embeds: [simpleEmbed("✅ +say (⃟)", `Message envoyé en tant que *${targetMember.displayName} ⃟* — clairement marqué comme une parodie.`)] }).then(m => setTimeout(()=>m.delete().catch(()=>{}), 4000)).catch(()=>{});
+        return message.channel.send({ embeds: [simpleEmbed("â +say (â)", `Message envoyÃ© en tant que *${targetMember.displayName} â* â clairement marquÃ© comme une parodie.`)] }).then(m => setTimeout(()=>m.delete().catch(()=>{}), 4000)).catch(()=>{});
       } catch (err) {
         console.error("Erreur +say:", err);
-        return message.reply("Erreur lors de l'exécution de +say.");
+        return message.reply("Erreur lors de l'exÃ©cution de +say.");
       }
     }
 
@@ -829,14 +832,14 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
     if (command === 'serverpic') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
       const icon = message.guild.iconURL({ dynamic: true, size: 1024 });
-      const embed = new EmbedBuilder().setTitle(`${message.guild.name} - icône`).setImage(icon).setColor(MAIN_COLOR);
+      const embed = new EmbedBuilder().setTitle(`${message.guild.name} - icÃ´ne`).setImage(icon).setColor(MAIN_COLOR);
       return message.channel.send({ embeds: [embed] }).catch(()=>{});
     }
     if (command === 'serverbanner') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
       const banner = message.guild.bannerURL?.({ size: 1024 });
-      if (!banner) return message.reply("Ce serveur n'a pas de bannière !");
-      const embed = new EmbedBuilder().setTitle(`${message.guild.name} - bannière`).setImage(banner).setColor(MAIN_COLOR);
+      if (!banner) return message.reply("Ce serveur n'a pas de banniÃ¨re !");
+      const embed = new EmbedBuilder().setTitle(`${message.guild.name} - banniÃ¨re`).setImage(banner).setColor(MAIN_COLOR);
       return message.channel.send({ embeds: [embed] }).catch(()=>{});
     }
 
@@ -849,24 +852,24 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       const role = message.mentions.roles.first() || parseRoleArg(message.guild, roleArg) || message.guild.roles.cache.get(roleArg);
       if (!member || !role) return message.reply("Usage: +addrole @user <roleID>");
       const limit = client.limitRoles.get(role.id);
-      if (limit && role.members.size >= limit) return message.reply(`Le rôle ${role.name} a atteint sa limite (${limit}).`);
-      await member.roles.add(role).catch(()=>message.reply("Impossible d'ajouter le rôle (vérifie mes permissions)."));
+      if (limit && role.members.size >= limit) return message.reply(`Le rÃ´le ${role.name} a atteint sa limite (${limit}).`);
+      await member.roles.add(role).catch(()=>message.reply("Impossible d'ajouter le rÃ´le (vÃ©rifie mes permissions)."));
       // log to role-logs
       try {
         const logs = await ensureLogChannels(message.guild);
         const ch = logs.roles;
         if (ch) {
           const embed = new EmbedBuilder()
-            .setTitle("Rôle ajouté (via +addrole)")
+            .setTitle("RÃ´le ajoutÃ© (via +addrole)")
             .addFields(
               { name: "Membre", value: `${member.user.tag} (${member.id})`, inline: true },
-              { name: "Rôle", value: `${role.name} (${role.id})`, inline: true },
-              { name: "Exécutant", value: `${message.author.tag}`, inline: true }
+              { name: "RÃ´le", value: `${role.name} (${role.id})`, inline: true },
+              { name: "ExÃ©cutant", value: `${message.author.tag}`, inline: true }
             ).setColor(MAIN_COLOR).setTimestamp();
           ch.send({ embeds: [embed] }).catch(()=>{});
         }
       } catch {}
-      return message.channel.send(`✅ ${member.user.tag} a reçu le rôle ${role.name}`);
+      return message.channel.send(`â ${member.user.tag} a reÃ§u le rÃ´le ${role.name}`);
     }
     if (command === 'delrole') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
@@ -875,30 +878,30 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       const roleArg = args[0] || args[1];
       const role = message.mentions.roles.first() || parseRoleArg(message.guild, roleArg) || message.guild.roles.cache.get(roleArg);
       if (!member || !role) return message.reply("Usage: +delrole @user <roleID>");
-      await member.roles.remove(role).catch(()=>message.reply("Impossible de retirer le rôle (vérifie mes permissions)."));
+      await member.roles.remove(role).catch(()=>message.reply("Impossible de retirer le rÃ´le (vÃ©rifie mes permissions)."));
       try {
         const logs = await ensureLogChannels(message.guild);
         const ch = logs.roles;
         if (ch) {
           const embed = new EmbedBuilder()
-            .setTitle("Rôle retiré (via +delrole)")
+            .setTitle("RÃ´le retirÃ© (via +delrole)")
             .addFields(
               { name: "Membre", value: `${member.user.tag} (${member.id})`, inline: true },
-              { name: "Rôle", value: `${role.name} (${role.id})`, inline: true },
-              { name: "Exécutant", value: `${message.author.tag}`, inline: true }
+              { name: "RÃ´le", value: `${role.name} (${role.id})`, inline: true },
+              { name: "ExÃ©cutant", value: `${message.author.tag}`, inline: true }
             ).setColor(MAIN_COLOR).setTimestamp();
           ch.send({ embeds: [embed] }).catch(()=>{});
         }
       } catch {}
-      return message.channel.send(`✅ ${member.user.tag} a perdu le rôle ${role.name}`);
+      return message.channel.send(`â ${member.user.tag} a perdu le rÃ´le ${role.name}`);
     }
     if (command === 'derank') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
       if (!message.guild) return message.reply("Commande en serveur uniquement.");
       const member = message.mentions.members.first();
       if (!member) return message.reply("Mentionnez un membre !");
-      await member.roles.set([]).catch(()=>message.reply("Impossible de modifier les rôles."));
-      return message.channel.send(`✅ ${member.user.tag} a été déranké !`);
+      await member.roles.set([]).catch(()=>message.reply("Impossible de modifier les rÃ´les."));
+      return message.channel.send(`â ${member.user.tag} a Ã©tÃ© dÃ©rankÃ© !`);
     }
 
     // ---------- LIMIT ROLE ----------
@@ -910,7 +913,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!role || isNaN(max) || max < 1) return message.reply("Usage: +limitrole @role <max>");
       client.limitRoles.set(role.id, max);
       persistAll();
-      return message.channel.send(`✅ Limite du rôle ${role.name} définie à ${max} membres !`);
+      return message.channel.send(`â Limite du rÃ´le ${role.name} dÃ©finie Ã  ${max} membres !`);
     }
     if (command === 'unlimitrole' || command === 'unlimiterole') {
       if (!isWL(message.author.id) && !isOwner(message.author.id)) return sendNoAccess(message);
@@ -919,7 +922,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!role) return message.reply("Usage: +unlimitrole @role");
       client.limitRoles.delete(role.id);
       persistAll();
-      return message.channel.send(`✅ Limite du rôle ${role.name} supprimée !`);
+      return message.channel.send(`â Limite du rÃ´le ${role.name} supprimÃ©e !`);
     }
 
     // ---------- ANT TOGGLES ----------
@@ -927,7 +930,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (command === 'antiraid' && !isOwner(message.author.id)) return sendNoAccess(message);
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
       client[command] = !client[command];
-      return message.channel.send(`✅ ${command} ${client[command] ? "activé" : "désactivé"} !`);
+      return message.channel.send(`â ${command} ${client[command] ? "activÃ©" : "dÃ©sactivÃ©"} !`);
     }
 
     // ---------- SLOWMODE ----------
@@ -937,20 +940,20 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       const seconds = parseInt(args[0]);
       if (isNaN(seconds) || seconds < 0 || seconds > 21600) return message.reply("Donne un nombre entre 0 et 21600 (secondes).");
       message.channel.setRateLimitPerUser(seconds).then(() => {
-        message.channel.send(`✅ Slowmode défini à ${seconds}s pour ce salon.`).then(m => setTimeout(() => m.delete().catch(()=>{}), 5000));
-      }).catch(() => message.reply("Impossible de modifier le slowmode (vérifie mes permissions)."));
+        message.channel.send(`â Slowmode dÃ©fini Ã  ${seconds}s pour ce salon.`).then(m => setTimeout(() => m.delete().catch(()=>{}), 5000));
+      }).catch(() => message.reply("Impossible de modifier le slowmode (vÃ©rifie mes permissions)."));
       return;
     }
 
     // ---------- SNIPE ----------
     if (command === 'snipe') {
       const snipe = client.snipes.get(message.channel.id);
-      if (!snipe) return message.reply("Aucun message à snipe !");
+      if (!snipe) return message.reply("Aucun message Ã  snipe !");
       const date = new Date(snipe.timestamp || Date.now());
       const embed = new EmbedBuilder()
         .setAuthor({ name: snipe.author.tag, iconURL: snipe.author.displayAvatarURL?.({ dynamic: true }) })
         .setDescription(snipe.content)
-        .addFields({ name: "Supprimé le", value: `${date.toLocaleString()}`, inline: true })
+        .addFields({ name: "SupprimÃ© le", value: `${date.toLocaleString()}`, inline: true })
         .setColor(MAIN_COLOR);
       const sent = await message.channel.send({ embeds: [embed] }).catch(()=>null);
       if (sent) setTimeout(() => sent.delete().catch(()=>{}), 30000); // keep a bit longer
@@ -980,13 +983,13 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
             if (fetched.size < fetchLimit) break;
           }
           const toDelete = fetchedAll.filter(m => m.author.id === possibleMention.id).slice(0, toDeleteLimit);
-          if (toDelete.length === 0) return message.reply("Aucun message trouvé de cet utilisateur dans ce salon (récents).");
+          if (toDelete.length === 0) return message.reply("Aucun message trouvÃ© de cet utilisateur dans ce salon (rÃ©cents).");
           while (toDelete.length) {
             const chunk = toDelete.splice(0, 100);
             await message.channel.bulkDelete(chunk.map(m => m.id), true).catch(()=>{});
             await new Promise(res => setTimeout(res, 500)); // small delay
           }
-          const info = await message.channel.send({ embeds: [simpleEmbed("Messages supprimés", `✅ ${toDeleteLimit} messages (ou jusqu'à ${toDeleteLimit} trouvés) de ${possibleMention.tag} supprimés.`)] }).catch(()=>null);
+          const info = await message.channel.send({ embeds: [simpleEmbed("Messages supprimÃ©s", `â ${toDeleteLimit} messages (ou jusqu'Ã  ${toDeleteLimit} trouvÃ©s) de ${possibleMention.tag} supprimÃ©s.`)] }).catch(()=>null);
           if (info) setTimeout(() => info.delete().catch(()=>{}), 3000);
         } catch (err) {
           console.error("clear @user error:", err);
@@ -1010,7 +1013,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
             beforeId = f.size > 0 ? f.last().id : undefined;
             await new Promise(res => setTimeout(res, 300));
           }
-          const info = await message.channel.send({ embeds: [simpleEmbed("Messages supprimés", `✅ ${toDel} messages supprimés (max 300).`)] }).catch(()=>null);
+          const info = await message.channel.send({ embeds: [simpleEmbed("Messages supprimÃ©s", `â ${toDel} messages supprimÃ©s (max 300).`)] }).catch(()=>null);
           if (info) setTimeout(() => info.delete().catch(()=>{}), 3000);
         } catch (err) {
           console.error("clear number error:", err);
@@ -1026,36 +1029,32 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!message.guild) return message.reply("Commande en serveur uniquement.");
       const member = message.mentions.members.first();
       if (!member) return message.reply("Mentionnez un membre !");
-      if (member.id === message.author.id) return message.reply("Tu ne peux pas te mettre toi-même en dog !");
-      if (client.dogs.has(member.id)) return message.reply("Ce membre est déjà en laisse !");
-      // lock name: DisplayName ( 🦮 ExecutorDisplayName )
+      if (member.id === message.author.id) return message.reply("Tu ne peux pas te mettre toi-mÃªme en dog !");
+      if (client.dogs.has(member.id)) return message.reply("Ce membre est dÃ©jÃ  en laisse !");
+      // lock name: DisplayName ( ð¦® ExecutorDisplayName )
       const executorDisplay = message.member.displayName.replace(/\)/g,'').replace(/\(/g,'');
-      const lockedName = `${member.displayName} ( 🦮 ${executorDisplay} )`;
+      const lockedName = `${member.displayName} ( ð¦® ${executorDisplay} )`;
       client.dogs.set(member.id, { executorId: message.author.id, lockedName });
       client.lockedNames.add(member.id);
       persistAll();
       try { await member.setNickname(lockedName).catch(()=>{}); } catch {}
       try { if (member.voice.channel && message.member.voice.channel) await member.voice.setChannel(message.member.voice.channel).catch(()=>{}); } catch {}
-      return message.channel.send(`${member} a été mis en laisse par ${message.member.displayName}`);
+      return message.channel.send(`${member} a Ã©tÃ© mis en laisse par ${message.member.displayName}`);
     }
     if (command === 'undog') {
       if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
       if (!message.guild) return message.reply("Commande en serveur uniquement.");
-      // accept mention OR ID
-      let member = parseMemberArg(message.guild, args[0]) || (args[0] && message.guild.members.cache.get(args[0])) || null;
-      if (!member && args[0] && /^\d{17,19}$/.test(args[0])) {
-        member = await message.guild.members.fetch(args[0]).catch(()=>null);
-      }
-      if (!member) return message.reply("Mentionnez un membre ou donnez son ID !");
+      const member = message.mentions.members.first();
+      if (!member) return message.reply("Mentionnez un membre !");
       if (!client.dogs.has(member.id)) return message.reply("Ce membre n'est pas en laisse !");
       const info = client.dogs.get(member.id);
       // Only executor, admins or owner can undog
-      if (info.executorId !== message.author.id && !isAdminMember(message.member) && !isOwner(authorId)) return message.reply("Tu n'es pas le maître de ce dog !");
+      if (info.executorId !== message.author.id && !isAdminMember(message.member) && !isOwner(authorId)) return message.reply("Tu n'es pas le maÃ®tre de ce dog !");
       client.dogs.delete(member.id);
       client.lockedNames.delete(member.id);
       persistAll();
       await member.setNickname(null).catch(()=>{});
-      return message.channel.send(`✅ ${member.displayName} a été libéré par ${message.member.displayName} !`);
+      return message.channel.send(`â ${member.displayName} a Ã©tÃ© libÃ©rÃ© par ${message.member.displayName} !`);
     }
     if (command === 'undogall') {
       if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
@@ -1067,12 +1066,12 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       });
       client.dogs.clear();
       persistAll();
-      return message.channel.send("✅ Tous les dogs ont été libérés !");
+      return message.channel.send("â Tous les dogs ont Ã©tÃ© libÃ©rÃ©s !");
     }
     if (command === 'doglist') {
       if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
       if (!message.guild) return message.reply("Commande en serveur uniquement.");
-      if (client.dogs.size === 0) return message.reply("Aucun dog enregistré !");
+      if (client.dogs.size === 0) return message.reply("Aucun dog enregistrÃ© !");
       const list = [...client.dogs.entries()].map(([dogId, info]) => {
         const dog = message.guild.members.cache.get(dogId);
         const executor = message.guild.members.cache.get(info.executorId);
@@ -1087,10 +1086,10 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       const target = message.mentions.members.first() || (args[0] && message.guild.members.cache.get(args[0]));
       if (!target) return message.reply("Membre introuvable !");
       if (!target.voice.channel) return message.reply("Cet utilisateur n'est pas en vocal !");
-      if (!message.member.voice.channel) return message.reply("Tu dois être en vocal !");
+      if (!message.member.voice.channel) return message.reply("Tu dois Ãªtre en vocal !");
       if (!hasAccess(message.member, "perm_mv")) return sendNoAccess(message);
       await target.voice.setChannel(message.member.voice.channel).catch(()=>{});
-      return message.channel.send(`✅ ${target.displayName} déplacé dans ton channel vocal !`);
+      return message.channel.send(`â ${target.displayName} dÃ©placÃ© dans ton channel vocal !`);
     }
     if (command === 'permv') {
       if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
@@ -1099,7 +1098,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre !");
       client.permMvUsers.add(member.id);
       persistAll();
-      return message.channel.send(`✅ ${member.displayName} peut désormais utiliser +mv !`);
+      return message.channel.send(`â ${member.displayName} peut dÃ©sormais utiliser +mv !`);
     }
     if (command === 'unpermv') {
       if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
@@ -1108,17 +1107,17 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre !");
       client.permMvUsers.delete(member.id);
       persistAll();
-      return message.channel.send(`✅ ${member.displayName} ne peut plus utiliser +mv !`);
+      return message.channel.send(`â ${member.displayName} ne peut plus utiliser +mv !`);
     }
     if (['permvlist','permmvlist','permmv'].includes(command)) {
       if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
       if (!message.guild) return message.reply("Commande en serveur uniquement.");
-      if (client.permMvUsers.size === 0) return message.reply("Aucun membre autorisé à +mv !");
+      if (client.permMvUsers.size === 0) return message.reply("Aucun membre autorisÃ© Ã  +mv !");
       const list = [...client.permMvUsers].map(id => {
         const m = message.guild.members.cache.get(id);
         return m ? m.displayName : id;
       }).join("\n");
-      return message.channel.send(`Membres autorisés à +mv :\n${list}`);
+      return message.channel.send(`Membres autorisÃ©s Ã  +mv :\n${list}`);
     }
 
     // ---------- WAKEUP ----------
@@ -1129,16 +1128,16 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       let times = parseInt(args[1] || args[0 + 1]) || 0;
       if (!target) return message.reply("Mentionnez un membre !");
       if (!target.voice.channel) return message.reply("Cet utilisateur n'est pas en vocal !");
-      if (!times || times < 1 || times > 150) return message.reply("Donne un nombre de réveils entre 1 et 150 !");
+      if (!times || times < 1 || times > 150) return message.reply("Donne un nombre de rÃ©veils entre 1 et 150 !");
       const executorId = message.author.id;
       // cooldown check (persisted). owner immune
       if (!isOwner(executorId) && isOnPersistentCooldown('wakeup', executorId)) {
         const until = persistentCooldowns['wakeup'][executorId];
         const remain = Math.ceil((until - Date.now()) / 1000);
-        return message.reply(`⏳ Attends ${remain} secondes avant de refaire +wakeup !`);
+        return message.reply(`â³ Attends ${remain} secondes avant de refaire +wakeup !`);
       }
       if (!client._wakeupInProgress) client._wakeupInProgress = new Set();
-      if (client._wakeupInProgress.has(target.id)) return message.reply("Un wakeup est déjà en cours pour cette cible.");
+      if (client._wakeupInProgress.has(target.id)) return message.reply("Un wakeup est dÃ©jÃ  en cours pour cette cible.");
       client._wakeupInProgress.add(target.id);
       if (!isOwner(executorId)) setPersistentCooldown('wakeup', executorId, 5 * 60 * 1000);
       const voiceChannels = message.guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice && c.viewable).map(c => c);
@@ -1160,7 +1159,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       } finally {
         client._wakeupInProgress.delete(target.id);
       }
-      const dmMessage = `<@${executorId}> t'ordonne de te réveiller !`;
+      const dmMessage = `<@${executorId}> t'ordonne de te rÃ©veiller !`;
       (async () => {
         for (let i = 0; i < times; i++) {
           try { await target.send(dmMessage).catch(()=>{}); } catch {}
@@ -1173,12 +1172,12 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
         const logs = await ensureLogChannels(message.guild);
         const cmdCh = logs.commands;
         const embed = new EmbedBuilder()
-          .setTitle("Wakeup exécuté")
-          .setDescription(`Le wakeup de **${target.user.tag}** a été effectué.`)
+          .setTitle("Wakeup exÃ©cutÃ©")
+          .setDescription(`Le wakeup de **${target.user.tag}** a Ã©tÃ© effectuÃ©.`)
           .addFields(
             { name: "Cible", value: `${target.user.tag}`, inline: true },
-            { name: "Exécutant", value: `${message.author.tag}`, inline: true },
-            { name: "Times demandés", value: `${times}`, inline: true }
+            { name: "ExÃ©cutant", value: `${message.author.tag}`, inline: true },
+            { name: "Times demandÃ©s", value: `${times}`, inline: true }
           )
           .setColor(MAIN_COLOR).setTimestamp();
         if (cmdCh) {
@@ -1189,9 +1188,9 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
 
       // short feedback in current channel
       if (message.channel && message.channel.name !== 'commande-logs') {
-        await message.channel.send(`${target.displayName} se fait réveiller`).catch(()=>{});
+        await message.channel.send(`${target.displayName} se fait rÃ©veiller`).catch(()=>{});
       }
-      return message.channel.send(`✅ ${target.displayName} a été réveillé ${moved} fois (max demandé ${times}). DM(s) envoyé(s).`);
+      return message.channel.send(`â ${target.displayName} a Ã©tÃ© rÃ©veillÃ© ${moved} fois (max demandÃ© ${times}). DM(s) envoyÃ©(s).`);
     }
 
     // ---------- SNAP ----------
@@ -1204,7 +1203,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!isOwner(executorId) && isOnPersistentCooldown('snap', executorId)) {
         const until = persistentCooldowns['snap'][executorId];
         const remain = Math.ceil((until - Date.now()) / 1000);
-        return message.reply(`⏳ Attends ${remain} secondes avant de refaire +snap !`);
+        return message.reply(`â³ Attends ${remain} secondes avant de refaire +snap !`);
       }
       for (let i = 0; i < 5; i++) {
         try { await target.send(`<@${executorId}> te demande ton snap !`).catch(()=>{}); } catch {}
@@ -1217,11 +1216,11 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
         const logs = await ensureLogChannels(message.guild);
         const cmdCh = logs.commands;
         const embed = new EmbedBuilder()
-          .setTitle("Snap demandé")
-          .setDescription(`Le snap de **${target.user.tag}** a été demandé (DM envoyé).`)
+          .setTitle("Snap demandÃ©")
+          .setDescription(`Le snap de **${target.user.tag}** a Ã©tÃ© demandÃ© (DM envoyÃ©).`)
           .addFields(
             { name: "Cible", value: `${target.user.tag}`, inline: true },
-            { name: "Exécutant", value: `${message.author.tag}`, inline: true }
+            { name: "ExÃ©cutant", value: `${message.author.tag}`, inline: true }
           )
           .setColor(MAIN_COLOR)
           .setTimestamp();
@@ -1231,7 +1230,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       } catch (e) {}
 
       if (message.channel && message.channel.name !== 'commande-logs') {
-        await message.channel.send(`Le snap de ${target} a bien été demandé`).catch(()=>{});
+        await message.channel.send(`Le snap de ${target} a bien Ã©tÃ© demandÃ©`).catch(()=>{});
       }
 
       return;
@@ -1239,7 +1238,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
 
     // -------------------- SPAM MP (DM) - existing spammp left as-is but we won't modify it further --------------------
     if (command === 'spammp') {
-      // accès owner / wl / admin
+      // accÃ¨s owner / wl / admin
       if (!(isOwner(authorId) || isWL(authorId) || isAdminMember(message.member))) return sendNoAccess(message);
 
       // parsing : +spamMp @user message... <count>
@@ -1257,15 +1256,15 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       // last arg should be number
       const last = args[args.length - 1];
       const count = parseInt(last);
-      if (isNaN(count)) return message.reply("Donne un nombre de répétitions valide à la fin (ex: 10).");
-      if (count < 1 || count > 150) return message.reply("Le nombre doit être entre 1 et 150.");
+      if (isNaN(count)) return message.reply("Donne un nombre de rÃ©pÃ©titions valide Ã  la fin (ex: 10).");
+      if (count < 1 || count > 150) return message.reply("Le nombre doit Ãªtre entre 1 et 150.");
 
       // build the message (everything between arg[1]..arg[last-1])
       const msgParts = args.slice(1, args.length - 1);
       const dmText = msgParts.join(' ').trim();
-      if (!dmText) return message.reply("Tu dois fournir un message à envoyer.");
+      if (!dmText) return message.reply("Tu dois fournir un message Ã  envoyer.");
 
-      // protection hiérarchie : admin ne peut cibler owner ou WL
+      // protection hiÃ©rarchie : admin ne peut cibler owner ou WL
       if (!isOwner(authorId) && isAdminMember(message.member) && !isWL(authorId)) {
         if (targetUser.id === OWNER_ID) return message.reply("Tu ne peux pas toucher l'owner du bot.");
         if (client.whitelist.has(targetUser.id)) return message.reply("Tu ne peux pas toucher un WL.");
@@ -1276,7 +1275,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
         if (isOnPersistentCooldown('spamMp', authorId)) {
           const until = persistentCooldowns['spamMp'][authorId];
           const remain = Math.ceil((until - Date.now()) / 1000);
-          return message.reply(`⏳ Admin en cooldown pour +spamMp, attends ${remain} secondes.`);
+          return message.reply(`â³ Admin en cooldown pour +spamMp, attends ${remain} secondes.`);
         }
       }
 
@@ -1307,8 +1306,8 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
 
       // final feedback
       try {
-        if (ack) await ack.edit(`${message.author}, opération terminée — ${sent}/${count} MP(s) envoyés à <@${targetUser.id}>.`).catch(()=>{});
-        else await message.channel.send(`${message.author}, opération terminée — ${sent}/${count} MP(s) envoyés à <@${targetUser.id}>.`).catch(()=>{});
+        if (ack) await ack.edit(`${message.author}, opÃ©ration terminÃ©e â ${sent}/${count} MP(s) envoyÃ©s Ã  <@${targetUser.id}>.`).catch(()=>{});
+        else await message.channel.send(`${message.author}, opÃ©ration terminÃ©e â ${sent}/${count} MP(s) envoyÃ©s Ã  <@${targetUser.id}>.`).catch(()=>{});
       } catch {}
       return;
     }
@@ -1320,7 +1319,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre !");
       client.whitelist.add(member.id);
       persistAll();
-      return message.channel.send(`✅ ${member.user.tag} ajouté à la whitelist !`);
+      return message.channel.send(`â ${member.user.tag} ajoutÃ© Ã  la whitelist !`);
     }
     if (command === 'unwl') {
       if (!isOwner(message.author.id)) return sendNoAccess(message);
@@ -1328,7 +1327,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre !");
       client.whitelist.delete(member.id);
       persistAll();
-      return message.channel.send(`✅ ${member.user.tag} retiré de la whitelist !`);
+      return message.channel.send(`â ${member.user.tag} retirÃ© de la whitelist !`);
     }
     if (command === 'wlist') {
       if (!isOwner(message.author.id)) return sendNoAccess(message);
@@ -1342,12 +1341,12 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
       const member = message.mentions.members.first();
       if (!member) return message.reply("Mentionnez un membre !");
-      if (member.id === OWNER_ID || client.whitelist.has(member.id)) return message.reply("Impossible d'ajouter ce membre à la blacklist (protection owner / whitelist).");
+      if (member.id === OWNER_ID || client.whitelist.has(member.id)) return message.reply("Impossible d'ajouter ce membre Ã  la blacklist (protection owner / whitelist).");
       client.blacklist.add(member.id);
       persistAll();
       // kick immediately
-      try { await member.kick("Blacklist ajouté via +bl"); } catch {}
-      return message.channel.send(`✅ ${member.user.tag} ajouté à la blacklist et kick !`);
+      try { await member.kick("Blacklist ajoutÃ© via +bl"); } catch {}
+      return message.channel.send(`â ${member.user.tag} ajoutÃ© Ã  la blacklist et kick !`);
     }
     if (command === 'unbl') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
@@ -1360,7 +1359,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre ou fournis un ID !");
       client.blacklist.delete(member.id);
       persistAll();
-      return message.channel.send(`✅ ${member.id ? `<@${member.id}>` : member.user.tag} retiré de la blacklist !`);
+      return message.channel.send(`â ${member.id ? `<@${member.id}>` : member.user.tag} retirÃ© de la blacklist !`);
     }
     if (command === 'blist') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
@@ -1381,7 +1380,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       client.banList.add(member.id);
       persistAll();
       await member.ban({ reason: "Ban command" }).catch(()=>{});
-      return message.channel.send(`✅ ${member.user.tag} a été banni !`);
+      return message.channel.send(`â ${member.user.tag} a Ã©tÃ© banni !`);
     }
     if (command === 'unban') {
       if (!(isOwner(authorId) || isWL(authorId) || isAdminMember(message.member))) return sendNoAccess(message);
@@ -1395,7 +1394,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       client.banList.delete(user.id);
       persistAll();
       message.guild.members.unban(user.id).catch(()=>{});
-      return message.channel.send(`✅ ${user.tag} a été débanni !`);
+      return message.channel.send(`â ${user.tag} a Ã©tÃ© dÃ©banni !`);
     }
     if (command === 'banlist') {
       if (!(isOwner(authorId) || isWL(authorId) || isAdminMember(message.member))) return sendNoAccess(message);
@@ -1414,7 +1413,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
         client.banList.delete(id);
       }
       persistAll();
-      return message.channel.send("✅ Tentative de débannir tous les membres de la banList.");
+      return message.channel.send("â Tentative de dÃ©bannir tous les membres de la banList.");
     }
 
     // ---------- WET ----------
@@ -1423,11 +1422,11 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       const member = message.mentions.members.first();
       if (!member) return message.reply("Mentionnez un membre !");
       if (member.id === OWNER_ID || client.whitelist.has(member.id)) return message.reply("Impossible de wet ce membre (protection owner / whitelist).");
-      if (client.wetList.has(member.id)) return message.reply("Ce membre est déjà wet !");
+      if (client.wetList.has(member.id)) return message.reply("Ce membre est dÃ©jÃ  wet !");
       client.wetList.add(member.id);
       persistAll();
       await member.ban({ reason: "Wet ban" }).catch(()=>{});
-      return message.channel.send(`⚠️ ${member.user.tag} a été wet (banni) !`);
+      return message.channel.send(`â ï¸ ${member.user.tag} a Ã©tÃ© wet (banni) !`);
     }
     if (command === 'unwet') {
       if (!(isOwner(authorId) || isWL(authorId))) return sendNoAccess(message);
@@ -1438,11 +1437,11 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
         user = await client.users.fetch(id).catch(()=>null);
       }
       if (!user) return message.reply("Mentionnez un utilisateur ou fournis un ID !");
-      if (!client.wetList.has(user.id)) return message.reply("Ce membre n'a pas été wet !");
+      if (!client.wetList.has(user.id)) return message.reply("Ce membre n'a pas Ã©tÃ© wet !");
       client.wetList.delete(user.id);
       persistAll();
       message.guild.members.unban(user.id).catch(()=>{});
-      return message.channel.send(`✅ ${user.tag} a été dé-wet !`);
+      return message.channel.send(`â ${user.tag} a Ã©tÃ© dÃ©-wet !`);
     }
     if (command === 'wetlist') {
       if (!(isOwner(authorId) || isWL(authorId))) return sendNoAccess(message);
@@ -1461,7 +1460,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre !");
       client.lockedNames.add(member.id);
       persistAll();
-      return message.channel.send(`🔒 Le pseudo de ${member.displayName} est maintenant verrouillé !`);
+      return message.channel.send(`ð Le pseudo de ${member.displayName} est maintenant verrouillÃ© !`);
     }
     if (command === 'unlockname') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
@@ -1469,16 +1468,16 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre !");
       client.lockedNames.delete(member.id);
       persistAll();
-      return message.channel.send(`🔓 Le pseudo de ${member.displayName} est maintenant déverrouillé !`);
+      return message.channel.send(`ð Le pseudo de ${member.displayName} est maintenant dÃ©verrouillÃ© !`);
     }
     if (command === 'locknamelist') {
       if (!hasAccess(message.member, "admin")) return sendNoAccess(message);
-      if (client.lockedNames.size === 0) return message.reply("Aucun pseudo n'est verrouillé !");
+      if (client.lockedNames.size === 0) return message.reply("Aucun pseudo n'est verrouillÃ© !");
       const list = [...client.lockedNames].map(id => {
         const m = message.guild.members.cache.get(id);
         return m ? m.displayName : id;
       }).join("\n");
-      return message.channel.send(`Pseudos verrouillés :\n${list}`);
+      return message.channel.send(`Pseudos verrouillÃ©s :\n${list}`);
     }
 
     // ---------- ADMIN CUSTOM (+admin, +unadmin, +adminlist) ----------
@@ -1488,7 +1487,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre !");
       client.adminUsers.add(member.id);
       persistAll();
-      return message.channel.send(`✅ ${member.user.tag} a reçu la permission admin (via +admin).`);
+      return message.channel.send(`â ${member.user.tag} a reÃ§u la permission admin (via +admin).`);
     }
     if (command === 'unadmin' || command === 'deladmin') {
       if (!ownerOrWLOnly(message.author.id)) return sendNoAccess(message);
@@ -1496,7 +1495,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!member) return message.reply("Mentionnez un membre !");
       client.adminUsers.delete(member.id);
       persistAll();
-      return message.channel.send(`✅ ${member.user.tag} a perdu la permission admin (via +unadmin).`);
+      return message.channel.send(`â ${member.user.tag} a perdu la permission admin (via +unadmin).`);
     }
     if (command === 'adminlist') {
       if (!ownerOrWLOnly(message.author.id)) return sendNoAccess(message);
@@ -1510,7 +1509,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
         .setTitle("Liste des admins")
         .addFields(
           { name: "Admins via +admin", value: customAdmins.length ? customAdmins.join("\n") : "Aucun", inline: false },
-          { name: "Admins via rôle (permissions Administrator)", value: roleAdmins.length ? roleAdmins.join("\n") : "Aucun", inline: false }
+          { name: "Admins via rÃ´le (permissions Administrator)", value: roleAdmins.length ? roleAdmins.join("\n") : "Aucun", inline: false }
         )
         .setColor(MAIN_COLOR);
       return message.channel.send({ embeds: [embed] }).catch(()=>{});
@@ -1519,17 +1518,17 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
     // ---------- TEXT LOCK / UNLOCK ----------
     if (command === 'lock') {
       if (!hasAccess(message.member, "owner_wl_admin")) return sendNoAccess(message);
-      if (message.channel.type !== ChannelType.GuildText) return message.reply("Commande à effectuer dans un salon texte.");
+      if (message.channel.type !== ChannelType.GuildText) return message.reply("Commande Ã  effectuer dans un salon texte.");
       const ok = await setTextLock(message.channel, true);
-      if (ok) return message.channel.send("🔒 Salon verrouillé (seuls Owner/WL/Admin peuvent écrire).").catch(()=>{});
+      if (ok) return message.channel.send("ð Salon verrouillÃ© (seuls Owner/WL/Admin peuvent Ã©crire).").catch(()=>{});
       return message.reply("Erreur lors du verrouillage du salon.");
     }
     if (command === 'unlock') {
       if (!hasAccess(message.member, "owner_wl_admin")) return sendNoAccess(message);
-      if (message.channel.type !== ChannelType.GuildText) return message.reply("Commande à effectuer dans un salon texte.");
+      if (message.channel.type !== ChannelType.GuildText) return message.reply("Commande Ã  effectuer dans un salon texte.");
       const ok = await setTextLock(message.channel, false);
-      if (ok) return message.channel.send("🔓 Salon déverrouillé.").catch(()=>{});
-      return message.reply("Erreur lors du déverrouillage du salon.");
+      if (ok) return message.channel.send("ð Salon dÃ©verrouillÃ©.").catch(()=>{});
+      return message.reply("Erreur lors du dÃ©verrouillage du salon.");
     }
 
     // ---------- VOICE PRIVATIZATION (PV) ----------
@@ -1537,56 +1536,56 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!hasAccess(message.member, "owner_wl_admin")) return sendNoAccess(message);
       // operate on voice channel where the command user is
       const vc = message.member.voice.channel;
-      if (!vc) return message.reply("Tu dois être en vocal pour utiliser +pv ici.");
+      if (!vc) return message.reply("Tu dois Ãªtre en vocal pour utiliser +pv ici.");
       const pv = client.pvChannels.get(vc.id);
       if (pv) {
         // currently private -> make public
         const ok = await makeVoicePublic(vc);
-        if (ok) return message.channel.send(`✅ Ce vocal (${vc.name}) est redevenu public.`).catch(()=>{});
+        if (ok) return message.channel.send(`â Ce vocal (${vc.name}) est redevenu public.`).catch(()=>{});
         return message.reply("Erreur lors du passage en public.");
       } else {
         // make private and grant access to current members
         const ok = await makeVoicePrivate(vc, message.member);
-        if (ok) return message.channel.send(`🔒 Ce vocal (${vc.name}) est maintenant privé. Les membres présents ont l'accès.`).catch(()=>{});
-        return message.reply("Erreur lors du passage en privé.");
+        if (ok) return message.channel.send(`ð Ce vocal (${vc.name}) est maintenant privÃ©. Les membres prÃ©sents ont l'accÃ¨s.`).catch(()=>{});
+        return message.reply("Erreur lors du passage en privÃ©.");
       }
     }
 
     if (command === 'pvacces') {
       if (!hasAccess(message.member, "owner_wl_admin")) return sendNoAccess(message);
       const vc = message.member.voice.channel;
-      if (!vc) return message.reply("Tu dois être en vocal pour utiliser +pvacces ici.");
+      if (!vc) return message.reply("Tu dois Ãªtre en vocal pour utiliser +pvacces ici.");
       const pv = client.pvChannels.get(vc.id);
-      if (!pv) return message.reply("Ce vocal n'est pas en mode privé (+pv).");
+      if (!pv) return message.reply("Ce vocal n'est pas en mode privÃ© (+pv).");
       const target = message.mentions.users.first() || (args[0] && { id: args[0] });
-      if (!target) return message.reply("Mentionne ou fournis l'ID de l'utilisateur à autoriser.");
+      if (!target) return message.reply("Mentionne ou fournis l'ID de l'utilisateur Ã  autoriser.");
       const uid = (target.id) ? target.id : args[0];
       const ok = await addVoiceAccess(vc, uid);
-      if (ok) return message.channel.send(`✅ <@${uid}> a maintenant accès au vocal privé ${vc.name}.`).catch(()=>{});
-      return message.reply("Erreur lors de l'ajout d'accès.");
+      if (ok) return message.channel.send(`â <@${uid}> a maintenant accÃ¨s au vocal privÃ© ${vc.name}.`).catch(()=>{});
+      return message.reply("Erreur lors de l'ajout d'accÃ¨s.");
     }
 
     if (command === 'delacces') {
       if (!hasAccess(message.member, "owner_wl_admin")) return sendNoAccess(message);
       const vc = message.member.voice.channel;
-      if (!vc) return message.reply("Tu dois être en vocal pour utiliser +delacces ici.");
+      if (!vc) return message.reply("Tu dois Ãªtre en vocal pour utiliser +delacces ici.");
       const pv = client.pvChannels.get(vc.id);
-      if (!pv) return message.reply("Ce vocal n'est pas en mode privé (+pv).");
+      if (!pv) return message.reply("Ce vocal n'est pas en mode privÃ© (+pv).");
       const target = message.mentions.users.first() || (args[0] && { id: args[0] });
-      if (!target) return message.reply("Mentionne ou fournis l'ID de l'utilisateur à retirer.");
+      if (!target) return message.reply("Mentionne ou fournis l'ID de l'utilisateur Ã  retirer.");
       const uid = (target.id) ? target.id : args[0];
       const ok = await delVoiceAccess(vc, uid);
-      if (ok) return message.channel.send(`✅ <@${uid}> a perdu l'accès au vocal privé ${vc.name}.`).catch(()=>{});
-      return message.reply("Erreur lors de la suppression d'accès.");
+      if (ok) return message.channel.send(`â <@${uid}> a perdu l'accÃ¨s au vocal privÃ© ${vc.name}.`).catch(()=>{});
+      return message.reply("Erreur lors de la suppression d'accÃ¨s.");
     }
 
     if (command === 'accesall') {
       if (!hasAccess(message.member, "owner_wl_admin")) return sendNoAccess(message);
       const vc = message.member.voice.channel;
-      if (!vc) return message.reply("Tu dois être en vocal pour utiliser +accesall ici.");
+      if (!vc) return message.reply("Tu dois Ãªtre en vocal pour utiliser +accesall ici.");
       const ok = await grantAccessToAllInVoice(vc);
-      if (ok) return message.channel.send(`✅ Tous les membres présents dans ${vc.name} ont maintenant l'accès.`).catch(()=>{});
-      return message.reply("Erreur lors de l'ajout d'accès à tous.");
+      if (ok) return message.channel.send(`â Tous les membres prÃ©sents dans ${vc.name} ont maintenant l'accÃ¨s.`).catch(()=>{});
+      return message.reply("Erreur lors de l'ajout d'accÃ¨s Ã  tous.");
     }
 
     if (command === 'unpvall') {
@@ -1602,19 +1601,19 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
         const ok = await makeVoicePublic(ch);
         if (ok) count++;
       }
-      return message.channel.send(`✅ ${count} vocaux rendus publics.`).catch(()=>{});
+      return message.channel.send(`â ${count} vocaux rendus publics.`).catch(()=>{});
     }
 
     if (command === 'pvlist') {
       if (!hasAccess(message.member, "owner_wl_admin")) return sendNoAccess(message);
-      if (client.pvChannels.size === 0) return message.reply("Aucun vocal privé géré par le bot.");
+      if (client.pvChannels.size === 0) return message.reply("Aucun vocal privÃ© gÃ©rÃ© par le bot.");
       const list = [...client.pvChannels.entries()].map(([id, info]) => {
         const ch = message.guild.channels.cache.get(id);
         const name = ch ? ch.name : id;
         const allowed = [...info.allowed].map(x => `<@${x}>`).join(", ") || "Aucun";
         return `${name} -> ${allowed}`;
       }).join("\n\n");
-      return message.channel.send(`Vocaux privés gérés :\n${list}`).catch(()=>{});
+      return message.channel.send(`Vocaux privÃ©s gÃ©rÃ©s :\n${list}`).catch(()=>{});
     }
 
     // ---------- DMALL (OWNER-ONLY) ----------
@@ -1624,13 +1623,13 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       if (!message.guild) return message.reply("Commande utilisable uniquement en serveur.");
       // usage: +dmall <message text...>
       const dmText = args.join(' ').trim();
-      if (!dmText) return message.reply("Usage : +dmall <message à envoyer à tous les membres (non-bot)>");
+      if (!dmText) return message.reply("Usage : +dmall <message Ã  envoyer Ã  tous les membres (non-bot)>");
 
       // confirm start to owner via DM
       try {
         const ownerUser = await client.users.fetch(OWNER_ID).catch(()=>null);
         if (ownerUser) {
-          await ownerUser.send(`+dmall : opération lancée sur le serveur **${message.guild.name}** (${message.guild.id}). Envoi en cours...`).catch(()=>{});
+          await ownerUser.send(`+dmall : opÃ©ration lancÃ©e sur le serveur **${message.guild.name}** (${message.guild.id}). Envoi en cours...`).catch(()=>{});
         }
       } catch (e) {}
 
@@ -1661,11 +1660,11 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
       try {
         const ownerUser = await client.users.fetch(OWNER_ID).catch(()=>null);
         if (ownerUser) {
-          await ownerUser.send(`+dmall terminé sur **${message.guild.name}**. Envoyés : ${sentCount}. Échoués : ${failCount}.`).catch(()=>{});
+          await ownerUser.send(`+dmall terminÃ© sur **${message.guild.name}**. EnvoyÃ©s : ${sentCount}. ÃchouÃ©s : ${failCount}.`).catch(()=>{});
         }
       } catch (e) {}
 
-      return message.channel.send(`✅ +dmall terminé. Envoyés : ${sentCount}. Échoués : ${failCount}. (Owner notifié en MP)`).catch(()=>{});
+      return message.channel.send(`â +dmall terminÃ©. EnvoyÃ©s : ${sentCount}. ÃchouÃ©s : ${failCount}. (Owner notifiÃ© en MP)`).catch(()=>{});
     }
 
     // If no command matched, ignore (end)
@@ -1679,7 +1678,7 @@ ner') && !message.guild) return message.reply("Commande utilisable uniquement en
 
 // -------------------- READY --------------------
 client.once('ready', () => {
-  console.log(`✅ Connecté en tant que ${client.user.tag}`);
+  console.log(`â ConnectÃ© en tant que ${client.user.tag}`);
   try { client.user.setActivity("+help", { type: "LISTENING" }).catch(()=>{}); } catch {}
   // ensure log channels for all guilds the bot is in (create if missing)
   client.guilds.cache.forEach(async g => {
@@ -1688,13 +1687,13 @@ client.once('ready', () => {
 });
 
 // --------------------Graceful shutdown--------------------
-process.on('SIGINT', () => { console.log("SIGINT reçu, sauvegarde..."); persistAll(); process.exit(); });
+process.on('SIGINT', () => { console.log("SIGINT reÃ§u, sauvegarde..."); persistAll(); process.exit(); });
 process.on('beforeExit', () => { persistAll(); });
 
 // -------------------- LOGIN --------------------
 const token = process.env.TOKEN || process.env.TOKEN_DISCORD || process.env.DISCORD_TOKEN;
 if (!token) {
-  console.error("Aucun token trouvé. Ajoute ton token dans .env sous TOKEN=");
+  console.error("Aucun token trouvÃ©. Ajoute ton token dans .env sous TOKEN=");
   process.exit(1);
 }
 client.login(token).then(() => console.log("Bot login success.")).catch(err => console.error("Erreur de connexion :", err));
