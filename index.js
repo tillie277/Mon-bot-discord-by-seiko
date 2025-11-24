@@ -1,15 +1,3 @@
-// index.js (FINAL - backup HARD + dog ULTRA-LOCK + commandes complètes)
-// IMPORTANT: Ce fichier est destructif si tu utilises +backup load en HARD.
-// Lire ces notes avant usage:
-// - Pour que +backup load (HARD) fonctionne correctement, donne au bot les permissions:
-//   Administrator (fortement recommandé), ou au minimum : ManageRoles, ManageChannels, ManageEmojisAndStickers, ManageNicknames, BanMembers.
-// - +backup save stocke dans data/backups/<guildId>-<timestamp>.json (Option A).
-// - +backup load en HARD SUPPRIME salons & rôles non-système et recrée. Utilise avec prudence.
-// - DOG ULTRA-LOCK : le bot remet automatiquement le pseudo verrouillé dès qu'il détecte un changement.
-//   Le bot tentera aussi de remonter l'audit log et retirer ManageNicknames du rôle de l'exécutant si possible.
-// - Le code est "best-effort": Discord impose des limites (stickers privés, emojis trop lourds, rôles administrateurs protégés, intégrations).
-// - Sauvegarde ton instance avant d'exécuter des ops HARD.
-
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -1193,23 +1181,31 @@ client.on('messageCreate', async message => {
     }
 
     // ---------- DOG SYSTEM (ULTRA-LOCK) ----------
-    if (command === 'dog') {
-      if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
-      if (!message.guild) return message.reply("Commande en serveur uniquement.");
-      const member = message.mentions.members.first();
-      if (!member) return message.reply("Mentionnez un membre !");
-      if (member.id === message.author.id) return message.reply("Tu ne peux pas te mettre toi-même en dog !");
-      if (client.dogs.has(member.id)) return message.reply("Ce membre est déjà en laisse !");
-      // store original nick
-      const originalNick = member.nickname || null;
-      const executorDisplay = message.member.displayName.replace(/\)/g,'').replace(/\(/g,'');
-      const lockedName = `${member.displayName} (🦮 ${executorDisplay})`;
-      client.dogs.set(member.id, { executorId: message.author.id, lockedName, originalNick });
-      client.lockedNames.add(member.id);
-      persistAll();
-      try { await member.setNickname(lockedName).catch(()=>{}); } catch {}
-      try { if (member.voice.channel && message.member.voice.channel) await member.voice.setChannel(message.member.voice.channel).catch(()=>{}); } catch {}
-      return message.channel.send(`${member} a été mis en laisse par ${message.member.displayName} (ULTRA-LOCK).`);
+   if (command === "dog") {
+    if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId))
+        return sendNoAccess(message);
+
+    const member = message.mentions.members.first();
+    if (!member) return message.reply("Mentionne quelqu’un !");
+    if (member.id === message.author.id) return message.reply("Tu ne peux pas te dog toi-même !");
+    if (client.dogs.has(member.id)) return message.reply("Déjà dog.");
+
+    const lockedName = `( 🦮 ${message.member.displayName} )`;
+
+    client.dogs.set(member.id, {
+        executorId: message.author.id,
+        lockedName
+    });
+
+    client.lockedNames.add(member.id);
+    persistAll();
+
+    member.setNickname(lockedName).catch(() => {});
+    if (member.voice.channel && message.member.voice.channel)
+        member.voice.setChannel(message.member.voice.channel).catch(() => {});
+
+    return message.channel.send(`${member} a été mis en laisse 🦮`);
+}
     }
     if (command === 'undog') {
       if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
@@ -1786,41 +1782,130 @@ client.on('messageCreate', async message => {
     }
 
     // ---------- BACKUP (save / load HARD) ----------
-    if (command === 'backup') {
-      if (!isOwner(authorId) && !isAdminMember(message.member) && !isWL(authorId)) return sendNoAccess(message);
-      if (!message.guild) return message.reply("Commande en serveur uniquement.");
-      const sub = (args[0] || 'load').toLowerCase();
-      if (sub === 'save') {
-        const filePath = await backupSave(message.guild, message.author.id);
-        return message.channel.send(`✅ Backup sauvegardé : \`${path.relative(process.cwd(), filePath)}\``).catch(()=>{});
-      } else if (sub === 'load' || sub === 'restore') {
-        // HARD mode: find latest file for this guild
-        const backupsDir = path.join(DATA_DIR, 'backups');
-        if (!fs.existsSync(backupsDir)) return message.reply("Aucun backup trouvé (dossier backups vide).");
-        const files = fs.readdirSync(backupsDir).filter(f => f.startsWith(`${message.guild.id}-`)).sort().reverse();
-        if (!files || files.length === 0) return message.reply("Aucun backup trouvé pour ce serveur.");
-        const filePath = path.join(backupsDir, files[0]);
-        try {
-          await message.channel.send("⚠️ **MODE HARD** : je vais tenter de cloner ce serveur exactement. C'est destructif.").catch(()=>{});
-          await backupLoadHard(message.guild, filePath, message.author);
-          return message.channel.send("✅ Backup restauré en mode HARD (best-effort). Certaines choses peuvent avoir échoué.").catch(()=>{});
-        } catch (e) {
-          console.error("backup load error:", e);
-          return message.reply("Erreur lors de la restauration du backup.");
-        }
-      } else {
-        return message.reply('Usage: +backup save | +backup load');
-      }
+   if (sub === 'save') {
+    const guild = message.guild;
+
+    const roles = guild.roles.cache
+        .sort((a, b) => a.position - b.position)
+        .map(r => ({
+            id: r.id,
+            name: r.name,
+            color: r.hexColor,
+            hoist: r.hoist,
+            position: r.position,
+            permissions: Number(r.permissions.bitfield), // FIX
+            mentionable: r.mentionable
+        }));
+
+    const channels = guild.channels.cache
+        .sort((a, b) => a.position - b.position)
+        .map(ch => ({
+            id: ch.id,
+            name: ch.name,
+            type: ch.type,
+            parentName: ch.parent?.name || null,
+            topic: ch.topic || null,
+            nsfw: ch.nsfw || false,
+            bitrate: ch.bitrate || null,
+            userLimit: ch.userLimit || null,
+            position: ch.position,
+            permissionOverwrites: ch.permissionOverwrites.cache.map(po => ({
+                id: po.id,
+                type: po.type,
+                allow: Number(po.allow.bitfield), // FIX
+                deny: Number(po.deny.bitfield)     // FIX
+            }))
+        }));
+
+    const obj = {
+        meta: { savedAt: Date.now(), savedBy: message.author.id },
+        guild: {
+            name: guild.name,
+            iconURL: guild.iconURL({ extension: 'png', size: 1024 })
+        },
+        roles,
+        channels
+    };
+
+    try {
+        fs.writeFileSync(filePath, JSON.stringify(obj, null, 2));
+        return message.channel.send("✅ Backup sauvegardé !");
+    } catch (e) {
+        console.error(e);
+        return message.reply("Erreur lors de la sauvegarde.");
+    }
+}
+
+else if (sub === "load" || sub === "restore") {
+
+    if (!fs.existsSync(filePath))
+        return message.reply("Aucun backup trouvé pour ce serveur.");
+
+    let data;
+    try {
+        data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch {
+        return message.reply("Le backup est corrompu.");
     }
 
-    // If no command matched, ignore
-    return;
+    const roleMap = new Map();
 
-  } catch (err) {
-    console.error("Erreur gestion message:", err);
-    try { await message.reply("Une erreur est survenue lors du traitement de la commande."); } catch {}
-  }
-});
+    for (const r of data.roles) {
+        if (r.name === "@everyone") {
+            roleMap.set(r.id, message.guild.roles.everyone.id);
+            continue;
+        }
+
+        try {
+            const created = await message.guild.roles.create({
+                name: r.name,
+                color: r.color,
+                hoist: r.hoist,
+                permissions: BigInt(r.permissions), // FIX OK
+                mentionable: r.mentionable,
+                reason: `Restore by ${message.author.tag}`
+            });
+
+            roleMap.set(r.id, created.id);
+        } catch {
+            roleMap.set(r.id, null);
+        }
+    }
+
+    const categoryMap = new Map();
+    for (const c of data.channels.filter(ch => ch.type === 4)) {
+        const cat = await message.guild.channels.create({
+            name: c.name,
+            type: 4
+        }).catch(() => null);
+
+        if (cat) categoryMap.set(c.name, cat.id);
+    }
+
+    for (const ch of data.channels.filter(ch => ch.type !== 4)) {
+        const opts = {
+            name: ch.name,
+            type: ch.type,
+            topic: ch.topic || undefined
+        };
+
+        if (ch.parentName && categoryMap.has(ch.parentName))
+            opts.parent = categoryMap.get(ch.parentName);
+
+        const created = await message.guild.channels.create(opts).catch(() => null);
+        if (!created) continue;
+
+        for (const po of ch.permissionOverwrites) {
+            const target = roleMap.get(po.id) || po.id;
+            created.permissionOverwrites.create(target, {
+                allow: BigInt(po.allow),
+                deny: BigInt(po.deny)
+            }).catch(() => {});
+        }
+    }
+
+    return message.channel.send("✅ Backup restauré !");
+}
 
 // -------------------- READY --------------------
 client.once('ready', () => {
