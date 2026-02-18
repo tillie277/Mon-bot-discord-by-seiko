@@ -1,17 +1,26 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const http = require('http'); // Ajout pour le serveur web
 const { 
   Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, 
   ChannelType, Partials, ActivityType 
 } = require('discord.js');
+
+// -------------------- SERVEUR DE MAINTIEN (RENDER) --------------------
+// Ce bloc empêche Render de couper ton bot
+http.createServer((req, res) => {
+  res.write("Inaya Bot est en ligne !");
+  res.end();
+}).listen(process.env.PORT || 3000, () => {
+  console.log("🌐 Serveur de maintien activé sur le port " + (process.env.PORT || 3000));
+});
 
 // -------------------- CONFIGURATION --------------------
 const MAIN_COLOR = "#8A2BE2";
 const OWNER_ID = "726063885492158474"; 
 const DATA_DIR = path.resolve(__dirname, 'data');
 
-// Vérification et création du dossier de données
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 let db = {
@@ -22,7 +31,6 @@ let db = {
 const dbPath = path.join(DATA_DIR, 'database.json');
 const saveDB = () => fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
 
-// Chargement de la base de données existante
 if (fs.existsSync(dbPath)) {
     try {
         db = JSON.parse(fs.readFileSync(dbPath));
@@ -42,7 +50,6 @@ client.on('ready', () => {
     console.log(`✅ Connecté en tant que ${client.user.tag}`);
     console.log(`📺 Statut Streaming activé : seïko votre Rois`);
     
-    // Définition du statut streaming
     client.user.setActivity({
         name: 'seïko votre Rois',
         type: ActivityType.Streaming,
@@ -56,7 +63,6 @@ const isWL = (m) => isOwner(m.user) || db.whitelist.includes(m.id);
 const isAdmin = (m) => isWL(m) || db.adminUsers.includes(m.id) || m.permissions.has(PermissionsBitField.Flags.Administrator);
 const cooldowns = new Map();
 
-// Système de Logs Automatique
 async function sendLog(guild, content) {
     let category = guild.channels.cache.find(c => c.name === "inaya-logs" && c.type === ChannelType.GuildCategory);
     if (!category) {
@@ -85,11 +91,10 @@ client.on('guildMemberAdd', async (member) => {
     }
 });
 
-// -------------------- COMMANDES --------------------
+// -------------------- COMMANDES (INCHANGÉES) --------------------
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild || !message.content.startsWith('+')) return;
 
-  // Anti-doublon (1 seconde entre commandes)
   const now = Date.now();
   if (cooldowns.has(message.author.id) && now - cooldowns.get(message.author.id) < 1000) return;
   cooldowns.set(message.author.id, now);
@@ -98,7 +103,6 @@ client.on('messageCreate', async (message) => {
   const command = args.shift().toLowerCase();
 
   try {
-      // --- COMMANDES OWNER ---
       if (command === 'dmall' && isOwner(message.author)) {
         const text = args.join(" ");
         if (!text) return message.reply("Message vide.");
@@ -113,7 +117,6 @@ client.on('messageCreate', async (message) => {
         return message.reply(`Anti-Raid ${db.raidConfig.status ? "Activé" : "Désactivé"}.`);
       }
 
-      // --- COMMANDES WHITELIST (Danger Élevé) ---
       if (isWL(message.member)) {
         if (command === 'ban') {
           const target = message.mentions.members.first() || await message.guild.members.fetch(args[0]).catch(()=>null);
@@ -124,7 +127,7 @@ client.on('messageCreate', async (message) => {
           }
         }
         
-        if (command === 'mvalls') { // Tout le serveur vers un salon
+        if (command === 'mvalls') {
           const channel = message.guild.channels.cache.get(args[0]);
           if (!channel || channel.type !== ChannelType.GuildVoice) return message.reply("ID Salon Vocal invalide.");
           const members = message.guild.members.cache.filter(m => m.voice.channel);
@@ -132,7 +135,7 @@ client.on('messageCreate', async (message) => {
           return message.reply(`Déplacement de ${members.size} personnes.`);
         }
 
-        if (command === 'clear') { // Clear cible ou global
+        if (command === 'clear') {
             const target = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(()=>null) : null);
             let msgs = await message.channel.messages.fetch({ limit: 100 });
             if (target) {
@@ -159,9 +162,8 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      // --- COMMANDES ADMIN (Chill / Mod) ---
       if (isAdmin(message.member)) {
-        if (command === 'mvall') { // Salon actuel vers un autre salon
+        if (command === 'mvall') {
             const channel = message.guild.channels.cache.get(args[0]);
             if (!message.member.voice.channel) return message.reply("Tu dois être en vocal.");
             const members = message.member.voice.channel.members;
@@ -203,7 +205,6 @@ client.on('messageCreate', async (message) => {
         }
       }
 
-      // --- COMMANDES PUBLIQUES ---
       if (command === 'ping') return message.reply("ta cru j'étais off btrd?");
       
       if (command === 'help') {
@@ -222,9 +223,15 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Persistance du pseudo
 client.on('guildMemberUpdate', (o, n) => {
     if (db.lockedNicks[n.id] && n.displayName !== db.lockedNicks[n.id]) n.setNickname(db.lockedNicks[n.id]).catch(()=>{});
 });
 
-client.login(process.env.TOKEN);
+// Connexion sécurisée
+if (!process.env.TOKEN) {
+    console.error("❌ Erreur : Le TOKEN est manquant dans tes variables d'environnement Render !");
+} else {
+    client.login(process.env.TOKEN).catch(err => {
+        console.error("❌ Impossible de se connecter à Discord. Vérifie ton Token et tes Privileged Intents :", err.message);
+    });
+}
