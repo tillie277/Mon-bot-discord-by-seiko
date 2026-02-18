@@ -2,13 +2,8 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { 
-  Client, 
-  GatewayIntentBits, 
-  EmbedBuilder, 
-  PermissionsBitField, 
-  ChannelType, 
-  Partials,
-  ActivityType 
+  Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, 
+  ChannelType, Partials, ActivityType 
 } = require('discord.js');
 
 // -------------------- CONFIGURATION --------------------
@@ -17,203 +12,164 @@ const OWNER_ID = "726063885492158474";
 const DATA_DIR = path.resolve(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// -------------------- BASE DE DONNÉES --------------------
 let db = {
-  whitelist: [], wlRoles: [],
-  adminUsers: [], adminRoles: [],
-  blacklist: [], wetList: [],
-  dogs: {}, jailList: [],
-  config: { antispam: false, antibot: false, antlink: false, antiraid: false, raidlog: false }
+  whitelist: [], adminUsers: [],
+  lockedNicks: {}, // ID: Nickname
+  raidConfig: { status: false, antiLink: true, antiSpam: 5, antiToken: true, antiBot: true, antiMention: 5, antiCaps: 50, antiInvite: true, maxBan: 3 }
 };
 
 const dbPath = path.join(DATA_DIR, 'database.json');
-function saveDB() { fs.writeFileSync(dbPath, JSON.stringify(db, null, 2)); }
-if (fs.existsSync(dbPath)) { db = JSON.parse(fs.readFileSync(dbPath)); }
+const saveDB = () => fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
+if (fs.existsSync(dbPath)) db = JSON.parse(fs.readFileSync(dbPath));
 
-// -------------------- CLIENT & INTENTS --------------------
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildPresences,
-    GatewayIntentBits.DirectMessages
-  ],
-  partials: [Partials.Message, Partials.Channel, Partials.User]
+  intents: Object.values(GatewayIntentBits),
+  partials: [Partials.Message, Partials.Channel, Partials.User, Partials.GuildMember]
 });
 
-// -------------------- HELPERS PERMISSIONS --------------------
+// -------------------- HELPERS & PERMS --------------------
 const isOwner = (u) => u.id === OWNER_ID;
-const isWL = (m) => isOwner(m.user) || db.whitelist.includes(m.id) || m.roles.cache.some(r => db.wlRoles.includes(r.id));
-const isAdmin = (m) => isWL(m) || db.adminUsers.includes(m.id) || m.permissions.has(PermissionsBitField.Flags.Administrator) || m.roles.cache.some(r => db.adminRoles.includes(r.id));
+const isWL = (m) => isOwner(m.user) || db.whitelist.includes(m.id);
+const isAdmin = (m) => isWL(m) || db.adminUsers.includes(m.id) || m.permissions.has(PermissionsBitField.Flags.Administrator);
 
-// -------------------- LOGIQUE --------------------
+const cooldowns = new Set();
 
-client.on('ready', () => {
-  console.log(`✓ Connecté : ${client.user.tag} | Meilleur codeur au monde.`);
-  client.user.setActivity("+help", { type: ActivityType.Listening });
-});
-
-client.snipes = new Map();
-client.on('messageDelete', m => {
-  if (m.author?.bot) return;
-  client.snipes.set(m.channel.id, { content: m.content, author: m.author, image: m.attachments.first()?.url });
-});
-
-client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.guild) return;
-
-  // --- COMMANDE SECRÈTE : DMALL (OWNER ONLY) ---
-  if (message.content.startsWith('+dmall')) {
-    if (!isOwner(message.author)) return;
-    const msg = message.content.slice(7).trim();
-    if (!msg) return message.reply("Message vide.");
-    const members = (await message.guild.members.fetch()).filter(m => !m.user.bot);
-    message.author.send(`🚀 **Dmall commencé** : ${members.size} membres ciblés.`);
-    let success = 0;
-    for (const [id, member] of members) {
-      await new Promise(r => setTimeout(r, 1000));
-      try { await member.send(msg); success++; } catch(e) {}
+// -------------------- SYSTÈME DE LOGS AUTOMATIQUE --------------------
+async function sendLog(guild, content) {
+    let category = guild.channels.cache.find(c => c.name === "inaya-logs" && c.type === ChannelType.GuildCategory);
+    if (!category) {
+        category = await guild.channels.create({
+            name: "inaya-logs",
+            type: ChannelType.GuildCategory,
+            permissionOverwrites: [{ id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }]
+        });
     }
-    return message.author.send(`✅ **Dmall terminé** : Envoyé avec succès à ${success} membres.`);
-  }
+    let logChan = guild.channels.cache.find(c => c.name === "commande-logs" && c.parentId === category.id);
+    if (!logChan) {
+        logChan = await guild.channels.create({
+            name: "commande-logs",
+            type: ChannelType.GuildText,
+            parent: category.id
+        });
+    }
+    const embed = new EmbedBuilder()
+        .setColor(MAIN_COLOR)
+        .setDescription(content)
+        .setTimestamp();
+    logChan.send({ embeds: [embed] });
+}
 
-  if (!message.content.startsWith('+')) return;
+// -------------------- LOGIQUE ANTI-RAID --------------------
+client.on('guildMemberAdd', async (member) => {
+    if (!db.raidConfig.status) return;
+    if (db.raidConfig.antiBot && member.user.bot) return member.kick("Anti-Bot");
+    if (db.raidConfig.antiToken && (Date.now() - member.user.createdTimestamp) < 86400000) return member.kick("Anti-Token");
+});
+
+// -------------------- COMMANDES --------------------
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild || !message.content.startsWith('+')) return;
+
+  if (cooldowns.has(message.author.id)) return;
+  cooldowns.add(message.author.id);
+  setTimeout(() => cooldowns.delete(message.author.id), 500);
+
   const args = message.content.slice(1).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
-  // --- HELP (ADMIN+) ---
-  if (command === 'help' || command === 'thelp') {
-    if (!isAdmin(message.member)) return;
-    const embed = new EmbedBuilder()
-      .setColor(MAIN_COLOR).setTitle("📜 Liste des Commandes")
-      .addFields(
-        { name: "GENERAL", value: "`+ping`, `+ui`, `+pic`, `+banner`, `+serverpic`, `+serverbanner`, `+snipe`" },
-        { name: "ROLES & WL", value: "`+addrole`, `+delrole`, `+derank`, `+wl`, `+unwl`, `+admin`, `+unadmin`" },
-        { name: "MOD", value: "`+clear`, `+slowmode`, `+jail`, `+unjail`, `+hide`, `+lock`, `+unlock`, `+bl`, `+wet`" },
-        { name: "VOCAL", value: "`+mv`, `+mvall`, `+mvalls`, `+permv`, `+wakeup`" },
-        { name: "DOG", value: "`+dog`, `+undog`, `+undogall`" }
-      ).setFooter({ text: `Owner ID: ${OWNER_ID}` });
-    return message.channel.send({ embeds: [embed] });
-  }
-
-  // --- COMMANDES PUBLIQUES ---
-  if (command === 'ping') return message.reply("ta cru j'étais off btrd?");
-  
-  if (command === 'pic') {
-    const user = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(()=>null) : message.author);
-    return message.channel.send(user.displayAvatarURL({ dynamic: true, size: 1024 }));
-  }
-
-  if (command === 'banner') {
-    const user = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(()=>null) : message.author);
-    const target = await client.users.fetch(user.id, { force: true });
-    return message.channel.send(target.bannerURL({ dynamic: true, size: 1024 }) || "Pas de bannière.");
-  }
-
-  if (command === 'snipe') {
-    const s = client.snipes.get(message.channel.id);
-    if (!s) return message.reply("Rien à sniper.");
-    const embed = new EmbedBuilder().setAuthor({ name: s.author.tag }).setDescription(s.content || "*(Fichier)*").setColor(MAIN_COLOR);
-    if (s.image) embed.setImage(s.image);
-    return message.channel.send({ embeds: [embed] });
-  }
-
-  // --- COMMANDES ADMIN / WL / OWNER ---
-  if (!isAdmin(message.member)) return;
-
-  // USER INFO (FORMAT DEMANDÉ)
-  if (command === 'ui') {
-    const t = message.mentions.members.first() || message.member;
-    const statusMap = { online: "En ligne", dnd: "Ne pas déranger", idle: "Inactif", offline: "Hors ligne" };
-    const platform = t.presence?.clientStatus?.mobile ? "Portable" : "Ordinateur";
-    
-    const ui = new EmbedBuilder().setColor(MAIN_COLOR)
-      .setTitle("Compte :").setDescription(`<@${t.id}>`)
-      .addFields(
-        { name: "Informations", value: `Pseudo: ${t.user.username}\nId: ${t.id}` },
-        { name: "Activité/Statut", value: `Statut :\n${statusMap[t.presence?.status] || "Hors ligne"}\nPlateforme : ${platform}\nActivité :\n${t.voice.channel ? "Vocal" : "Pas en vocal"}` },
-        { name: "Dates", value: `Créé : ${t.user.createdAt.toLocaleDateString('fr-FR', { full: true })}\nRejoint : ${t.joinedAt.toLocaleString('fr-FR')}` },
-        { name: "Rôles", value: t.roles.cache.filter(r => r.name !== "@everyone").map(r => `<@&${r.id}>`).join("\n") || "Aucun" }
-      );
-    return message.channel.send({ embeds: [ui] });
-  }
-
-  // JAIL
-  if (command === 'jail') {
-    const t = message.mentions.members.first(); if (!t) return;
-    let jr = message.guild.roles.cache.find(r => r.name === "Jail");
-    if (!jr) jr = await message.guild.roles.create({ name: "Jail", permissions: [] });
-    message.guild.channels.cache.forEach(c => c.permissionOverwrites.edit(jr, { ViewChannel: false }));
-    await t.roles.add(jr);
-    db.jailList.push(t.id); saveDB();
-    return message.reply("✓ Cible en prison.");
-  }
-
-  // MOVE ALLS (LE TOUT POUR LE TOUT)
-  if (command === 'mvalls') {
-    const target = message.guild.channels.cache.get(args[0]);
-    if (!target) return message.reply("ID de salon invalide.");
-    const allVoice = message.guild.members.cache.filter(m => m.voice.channel);
-    allVoice.forEach(m => m.voice.setChannel(target));
-    return message.channel.send(`✓ Déplacement de ${allVoice.size} membres vers ${target.name}.`);
-  }
-
-  // SNAP
-  if (command === 'snap') {
-    const t = message.mentions.members.first(); if (!t) return;
-    for (let i=0; i<5; i++) {
-      await t.send(`${message.member.displayName} te demande ton snap 💌`).catch(()=>{});
-      await new Promise(r => setTimeout(r, 800));
+  // --- COMMANDES OWNER ---
+  if (isOwner(message.author)) {
+    if (command === 'antiraid') {
+        db.raidConfig.status = !db.raidConfig.status; saveDB();
+        sendLog(message.guild, `🛡️ **Anti-Raid** modifié par ${message.author.tag} : ${db.raidConfig.status ? "ON" : "OFF"}`);
+        return message.reply(`Anti-Raid: ${db.raidConfig.status ? "Activé" : "Désactivé"}`);
     }
-    return message.reply("✓ Snaps envoyés.");
-  }
-
-  // DOGS
-  if (command === 'dog') {
-    const t = message.mentions.members.first(); if (!t || isWL(t)) return;
-    const nick = `🦮 ${t.user.username} (maître: ${message.author.username})`;
-    db.dogs[t.id] = nick; saveDB();
-    await t.setNickname(nick).catch(()=>{});
-    return message.reply("✓ Laisse attachée.");
-  }
-
-  // WL & ADMIN GESTION
-  if (command === 'wl' && isOwner(message.author)) {
-    const role = message.mentions.roles.first();
-    const user = message.mentions.users.first();
-    if (role) db.wlRoles.push(role.id);
-    else if (user) db.whitelist.push(user.id);
-    saveDB(); return message.reply("✓ Ajouté à la WL.");
-  }
-
-  // CLEAR (MAX 300)
-  if (command === 'clear') {
-    let num = parseInt(args[0]) || 100;
-    if (num > 300) num = 300;
-    const target = message.mentions.users.first();
-    if (target) {
-      const msgs = (await message.channel.messages.fetch({ limit: 100 })).filter(m => m.author.id === target.id);
-      await message.channel.bulkDelete(msgs);
-    } else {
-      for (let i = 0; i < Math.ceil(num / 100); i++) {
-        await message.channel.bulkDelete(Math.min(num - (i * 100), 100));
-      }
+    if (command === 'dmall') {
+        const text = args.join(" ");
+        if (!text) return message.reply("Texte manquant.");
+        const members = await message.guild.members.fetch();
+        members.forEach(m => { if(!m.user.bot) m.send(text).catch(()=>{}) });
+        sendLog(message.guild, `🚀 **DMALL** lancé par ${message.author.tag}`);
+        return message.reply("DM envoyé à tout le serveur.");
     }
-    return message.channel.send("✓ Nettoyé.").then(m => setTimeout(() => m.delete(), 2000));
   }
 
-  // HIDE
-  if (command === 'hide') {
-    const canSee = message.channel.permissionsFor(message.guild.roles.everyone).has(PermissionsBitField.Flags.ViewChannel);
-    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { ViewChannel: !canSee });
-    return message.reply(canSee ? "✓ Salon maintenant privé." : "✓ Salon maintenant public.");
+  // --- COMMANDES WHITELIST (WL) ---
+  if (isWL(message.member)) {
+    if (command === 'ban') {
+        const target = message.mentions.members.first() || await message.guild.members.fetch(args[0]).catch(()=>null);
+        if (target) { await target.ban(); message.reply("Banni."); sendLog(message.guild, `🔨 **Ban** : ${target.user.tag} par ${message.author.tag}`); }
+    }
+    if (command === 'unban') {
+        await message.guild.members.unban(args[0]); message.reply("Débanni.");
+        sendLog(message.guild, `🔓 **Unban** : ID ${args[0]} par ${message.author.tag}`);
+    }
+    if (command === 'clear') {
+        let amount = parseInt(args[0]) || 100;
+        await message.channel.bulkDelete(amount, true);
+        sendLog(message.guild, `🧹 **Clear** : ${amount} msgs dans ${message.channel.name} par ${message.author.tag}`);
+    }
+    if (command === 'renew') {
+        const newChan = await message.channel.clone();
+        await message.channel.delete();
+        sendLog(newChan.guild, `🔄 **Renew** : Salon ${newChan.name} recréé par ${message.author.tag}`);
+    }
+    if (command === 'addrole') {
+        const target = message.mentions.members.first();
+        const role = message.guild.roles.cache.find(r => r.name === args.slice(1).join(" "));
+        if(target && role) { await target.roles.add(role); message.reply("Rôle ajouté."); }
+    }
+    if (command === 'derank') {
+        const target = message.mentions.members.first();
+        if(target) { await target.roles.set([]); message.reply("Derank OK."); }
+    }
+  }
+
+  // --- COMMANDES ADMIN / FUN MOD ---
+  if (isAdmin(message.member)) {
+    if (command === 'mute') {
+        const target = message.mentions.members.first();
+        if(target) { await target.timeout(600000); message.reply("Mute 10m."); }
+    }
+    if (command === 'snap') {
+        const target = message.mentions.members.first();
+        if(target) {
+            for(let i=0; i<5; i++) { await target.send(`${message.member.displayName} te demande ton snap 💌`).catch(()=>{}); }
+            message.reply("Snaps envoyés.");
+            sendLog(message.guild, `📸 **Snap** : ${target.user.tag} ciblé par ${message.author.tag}`);
+        }
+    }
+    if (command === 'mp') {
+        const target = message.mentions.members.first();
+        const msg = args.slice(1).join(" ");
+        if(target && msg) {
+            await target.send(`${message.member.displayName} t'envoie : ${msg}`).catch(()=>{});
+            message.reply("MP envoyé.");
+            sendLog(message.guild, `📩 **MP** envoyé à ${target.user.tag} par ${message.author.tag}`);
+        }
+    }
+    if (command === 'lockname') {
+        const target = message.mentions.members.first();
+        if(target) { db.lockedNicks[target.id] = target.displayName; saveDB(); message.reply("Pseudo verrouillé."); }
+    }
+    if (command === 'say') { message.delete(); message.channel.send(args.join(" ")); }
+  }
+
+  // --- HELP ---
+  if (command === 'help') {
+      const helpEmbed = new EmbedBuilder()
+      .setColor(MAIN_COLOR).setTitle("📜 Aide Inaya")
+      .setDescription("`+antiraid` : Statut sécu | `+dmall` : Message général | `+snap @u` : 5 DMs snap | `+mp [msg] @u` : Message privé\n" +
+      "`+ban`/`+kick`/`+unban` : Modération | `+clear [x]` : Supprime messages | `+renew` : Reset salon\n" +
+      "`+addrole`/`+delrole` : Gère rôles | `+derank` : Full reset roles | `+mute`/`+unmute` : Timeout\n" +
+      "`+lock`/`+unlock` : Perms salon | `+slowmode [s]` : Temps d'attente | `+lockname` : Fixe le pseudo.");
+      message.channel.send({ embeds: [helpEmbed] });
   }
 });
 
-// PERSISTANCE NICKNAME
+// Persistance
 client.on('guildMemberUpdate', (o, n) => {
-  if (db.dogs[n.id]) {
-    if (n.nickname !== db.dogs[n.id]) n.setNickname(db.dogs[n.id]).catch(()=>{});
-  }
+    if (db.lockedNicks[n.id] && n.displayName !== db.lockedNicks[n.id]) n.setNickname(db.lockedNicks[n.id]).catch(()=>{});
 });
 
 client.login(process.env.TOKEN);
