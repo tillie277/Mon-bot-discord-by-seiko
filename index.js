@@ -9,8 +9,9 @@ const OWNER_ID = "726063885492158474"; // Remplace par ton ID si besoin
 const DATA_DIR = path.resolve(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const check ✓ = '✓';
-const cross ✘ = '✘';
+// 🩺 GUÉRISON : Noms de variables valides et emojis Discord officiels
+const check = '✅';
+const cross = '❌';
 
 const PATHS = {
     settings: path.join(DATA_DIR, 'settings.json'),
@@ -192,13 +193,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
     // Dog follow
     if (lists.dogs[newState.id] && newState.channelId) {
-        // Le dog bouge seul ? on le ramène
         const master = newState.guild.members.cache.get(lists.dogs[newState.id].executor);
         if (master?.voice.channelId && newState.channelId !== master.voice.channelId) {
             newState.setChannel(master.voice.channelId).catch(()=>{});
         }
     } else {
-        // Le maitre bouge ? on ramène le dog
         Object.keys(lists.dogs).forEach(dogId => {
             if (lists.dogs[dogId].executor === newState.id && newState.channelId) {
                 const dog = newState.guild.members.cache.get(dogId);
@@ -210,10 +209,8 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     // FabulousBot Protection (Mute/Deafen/Disconnect)
     if (lists.fabulous.includes(newState.id)) {
         if ((!oldState.serverMute && newState.serverMute) || (!oldState.serverDeaf && newState.serverDeaf) || (oldState.channelId && !newState.channelId)) {
-            // Un peu complexe sans fetch les audit logs, on va rétablir
             if (newState.serverMute) newState.setMute(false).catch(()=>{});
             if (newState.serverDeaf) newState.setDeaf(false).catch(()=>{});
-            // Récupérer l'attaquant via Audit Logs
             try {
                 const logs = await newState.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberUpdate });
                 const log = logs.entries.first();
@@ -244,22 +241,21 @@ client.on('messageCreate', async message => {
     }
 
     const prefix = getPrefix(message.guild.id);
-    if (!message.content.startsWith(prefix) && !message.content.startsWith('-')) return; // Gère + et -
+    if (!message.content.startsWith(prefix) && !message.content.startsWith('-')) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
-    const cmdPrefix = message.content.charAt(0);
-
+    
     const targetUser = message.mentions.members.first() || message.guild.members.cache.get(args[0]);
     const targetRole = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
 
-    // -------------------- COMMANDES GÉNÉRALES --------------------
+    // 🩺 GUÉRISON : Ajout des accolades { } dans les cases pour sécuriser la portée des variables (Lexical Scope)
     switch (command) {
         case 'ping':
             message.channel.send("ta cru j’étais off btrd?");
             break;
             
-        case 'help':
+        case 'help': {
             const helpEmbed = new EmbedBuilder()
                 .setTitle("Commandes du Bot")
                 .setDescription("Voici la liste des commandes. Préfixe: " + prefix)
@@ -270,8 +266,9 @@ client.on('messageCreate', async message => {
                 ).setColor(MAIN_COLOR);
             message.channel.send({ embeds: [helpEmbed] });
             break;
+        }
 
-        case 'setprefix':
+        case 'setprefix': {
             if (!isOwner(message.author.id)) return;
             const newPrefix = args[0];
             if (!newPrefix) return message.reply("Veuillez fournir un préfixe.");
@@ -286,21 +283,24 @@ client.on('messageCreate', async message => {
                 }).catch(() => message.channel.send("Temps écoulé."));
             });
             break;
+        }
 
-        case 'snipe':
+        case 'snipe': {
             const sniped = client.snipes.get(message.channel.id);
             if (!sniped) return message.reply("Aucun message à snipe !");
             const snEmbed = new EmbedBuilder().setAuthor({ name: sniped.author.tag, iconURL: sniped.author.displayAvatarURL() }).setDescription(sniped.content || "*Message sans texte*").setColor(MAIN_COLOR).setTimestamp(sniped.timestamp);
             if (sniped.image) snEmbed.setImage(sniped.image);
             message.channel.send({ embeds: [snEmbed] });
             break;
+        }
 
-        case 'pic':
+        case 'pic': {
             const tPic = message.mentions.users.first() || message.author;
             message.channel.send({ embeds: [new EmbedBuilder().setTitle(`Photo de profil de ${tPic.username}`).setImage(tPic.displayAvatarURL({ dynamic: true, size: 1024 })).setColor(MAIN_COLOR)] });
             break;
+        }
 
-        case 'say':
+        case 'say': {
             if (!isAdmin(message.member)) return;
             const chanSay = message.mentions.channels.first() || message.channel;
             const sayMsg = message.mentions.channels.first() ? args.slice(1).join(" ") : args.join(" ");
@@ -309,9 +309,9 @@ client.on('messageCreate', async message => {
                 if (message.channel.id === chanSay.id) message.delete().catch(()=>{});
             }
             break;
+        }
 
-        // -------------------- MODÉRATION --------------------
-        case 'clear':
+        case 'clear': {
             if (!isAdmin(message.member)) return;
             const amount = parseInt(args[0]) || (targetUser ? parseInt(args[1]) : 0);
             if (amount < 1 || amount > 100) return message.reply("Indiquez un nombre entre 1 et 100.");
@@ -324,6 +324,7 @@ client.on('messageCreate', async message => {
             }
             message.channel.send(`${check} Messages supprimés.`).then(m => setTimeout(()=>m.delete(), 2000));
             break;
+        }
 
         case 'lock':
             if (!isWL(message.author.id) && !isAdmin(message.member)) return;
@@ -337,7 +338,7 @@ client.on('messageCreate', async message => {
             message.channel.send(`🔓 Salon déverrouillé.`);
             break;
 
-        case 'bl':
+        case 'bl': {
             if (!isAdmin(message.member)) return;
             if (!targetUser) return;
             if (isWL(targetUser.id)) return message.reply("Tu ne peux pas BL un WL.");
@@ -348,8 +349,9 @@ client.on('messageCreate', async message => {
             targetUser.ban({ reason: `BL: ${reasonBl}` }).catch(()=>{});
             message.channel.send(`${check} ${targetUser.user.tag} blacklisté.`);
             break;
+        }
 
-        case 'unbl':
+        case 'unbl': {
             if (!isOwner(message.author.id) && !isWL(message.author.id) && !isAdmin(message.member)) return;
             const blId = args[0]?.replace(/[<@!>]/g,'');
             lists.blacklist = lists.blacklist.filter(id => id !== blId);
@@ -357,6 +359,7 @@ client.on('messageCreate', async message => {
             message.guild.members.unban(blId).catch(()=>{});
             message.channel.send(`${check} Utilisateur retiré de la BL.`);
             break;
+        }
 
         case 'wet':
             if (!isWL(message.author.id) && !isOwner(message.author.id)) return;
@@ -370,7 +373,7 @@ client.on('messageCreate', async message => {
             message.channel.send(`${check} ${targetUser.user.tag} a été WET.`);
             break;
 
-        case 'unwet':
+        case 'unwet': {
             if (!isWL(message.author.id) && !isOwner(message.author.id)) {
                 return message.reply("Attention à toi tu essaie de unban un utilisateur qui a été Wet par un Sys+.");
             }
@@ -380,8 +383,9 @@ client.on('messageCreate', async message => {
             message.guild.members.unban(wetId).catch(()=>{});
             message.channel.send(`${check} Utilisateur Un-WET.`);
             break;
+        }
 
-        case 'unbanall':
+        case 'unbanall': {
             if (!isAdmin(message.member)) return;
             const bans = await message.guild.bans.fetch();
             bans.forEach(ban => {
@@ -391,9 +395,10 @@ client.on('messageCreate', async message => {
             });
             message.channel.send(`${check} Tous les membres (hors BL/WET) ont été débannis.`);
             break;
+        }
 
         case 'baninfo':
-        case 'blinfo':
+        case 'blinfo': {
             const infoId = args[0]?.replace(/[<@!>]/g,'');
             if(!infoId) return;
             const banInfo = await message.guild.bans.fetch(infoId).catch(()=>null);
@@ -405,8 +410,8 @@ client.on('messageCreate', async message => {
                 message.channel.send({ embeds: [emb] });
             }
             break;
+        }
 
-        // -------------------- SYSTÈMES UNIQUES --------------------
         case 'dog':
             if (!isWL(message.author.id) && !isOwner(message.author.id) && !isAdmin(message.member)) return;
             if (!targetUser) return;
@@ -421,7 +426,7 @@ client.on('messageCreate', async message => {
             message.channel.send(`🦮 ${targetUser} est maintenant le chien de ${message.author}`);
             break;
 
-        case 'undog':
+        case 'undog': {
             if (!isWL(message.author.id) && !isOwner(message.author.id) && !isAdmin(message.member)) return;
             const dogId = targetUser ? targetUser.id : args[0];
             if (lists.dogs[dogId]) {
@@ -432,6 +437,7 @@ client.on('messageCreate', async message => {
                 message.channel.send(`${check} Libéré de sa laisse.`);
             }
             break;
+        }
 
         case 'fabulousbot':
             if (!isOwner(message.author.id)) return;
@@ -441,7 +447,7 @@ client.on('messageCreate', async message => {
             message.channel.send(`✨ ${targetUser} est maintenant un FabulousBot (Intouchable) !`);
             break;
 
-        case 'flood':
+        case 'flood': {
             if (!targetUser) return message.reply("Mentionnez une cible.");
             const maxMsg = Math.min(parseInt(args[1]) || 10, 10);
             const floods = [
@@ -458,6 +464,7 @@ client.on('messageCreate', async message => {
                 message.channel.send(`## ${rmd}`);
             }
             break;
+        }
 
         case 'smash':
             db.smashPass.push(message.channel.id);
@@ -483,8 +490,7 @@ client.on('messageCreate', async message => {
             saveDB();
             break;
 
-        // -------------------- SYSTÈME PV & VOCAL --------------------
-        case 'pv':
+        case 'pv': {
             if (!isAdmin(message.member)) return;
             const vcPv = message.member.voice.channel;
             if (!vcPv) return message.reply("Tu dois être en vocal.");
@@ -494,8 +500,9 @@ client.on('messageCreate', async message => {
             vcPv.permissionOverwrites.edit(message.author.id, { Connect: true });
             message.channel.send(`🔒 Salon vocal ${vcPv.name} passé en privé.`);
             break;
+        }
 
-        case 'pvacces':
+        case 'pvacces': {
             const vca = message.member.voice.channel;
             if(vca && lists.pvChannels[vca.id] && targetUser) {
                 lists.pvChannels[vca.id].allowed.push(targetUser.id);
@@ -503,9 +510,10 @@ client.on('messageCreate', async message => {
                 message.channel.send(`${check} Accès donné à ${targetUser}`);
             }
             break;
+        }
 
         case 'unpvs':
-        case 'unpv':
+        case 'unpv': {
             if (!isAdmin(message.member)) return;
             const vcd = message.member.voice.channel;
             if(vcd) {
@@ -514,6 +522,7 @@ client.on('messageCreate', async message => {
                 message.channel.send(`🔓 Salon vocal redevenu public.`);
             }
             break;
+        }
 
         case 'permmv':
             if (!isAdmin(message.member)) return;
@@ -552,7 +561,6 @@ client.on('messageCreate', async message => {
             } else if (args[0] === 'load') {
                 if (!backups[message.guild.id]) return message.reply("Aucune backup trouvée.");
                 message.channel.send("Chargement de la backup (les rôles et salons vont être restaurés).");
-                // Logique simplifiée pour éviter le rate limit massif
             }
             break;
 
@@ -571,7 +579,7 @@ client.on('messageCreate', async message => {
             }
             break;
 
-        case 'dmall':
+        case 'dmall': {
             if (!isOwner(message.author.id)) return;
             const msgDmall = args.join(" ");
             message.guild.members.cache.forEach((m, index) => {
@@ -579,6 +587,7 @@ client.on('messageCreate', async message => {
             });
             message.channel.send(`${check} Envoi des MPs en cours...`);
             break;
+        }
 
         case 'wl':
             if (!isOwner(message.author.id)) return;
