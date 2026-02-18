@@ -1,9 +1,3 @@
-// DÃ©finir le statut streaming
-    client.user.setActivity({
-        name: 'seïko votre rois',
-        type: ActivityType.Streaming,
-        url: 'https://www.twitch.tv/discord'
-    });
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
