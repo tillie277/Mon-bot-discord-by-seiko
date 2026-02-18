@@ -1,16 +1,20 @@
 {
-  "name": "discord-bot",
+  "name": "mon-bot-discord-by-seiko",
   "version": "1.0.0",
-  "description": "Bot Discord",
+  "description": "Bot Discord optimisé par Seiko",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.0",
-    "dotenv": "^16.3.1"
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5",
+    "fs": "0.0.1-security",
+    "path": "^0.12.7"
   },
   "engines": {
-    "node": ">=16.9.0"
-  }
+    "node": ">=18.0.0"
+  },
+  "author": "Seiko",
+  "license": "ISC"
 }
