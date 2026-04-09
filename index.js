@@ -45,7 +45,8 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildInvites
+    GatewayIntentBits.GuildInvites,
+    GatewayIntentBits.GuildPresences   // ← Ajouté pour récupérer le vrai statut et plateforme
   ]
 });
 
@@ -138,6 +139,29 @@ function hasAccess(member, level) {
   if (level === "admin") return isAdmin(member) || isWL(id) || isOwner(id);
   if (level === "everyone") return true;
   return false;
+}
+
+// Fonction pour récupérer le vrai statut et plateforme
+function getStatusAndPlatform(member) {
+  if (!member.presence) return { status: "Hors ligne", platform: "Inconnu" };
+
+  const statusMap = {
+    online: "🟢 En ligne",
+    idle: "🟡 Inactif",
+    dnd: "🔴 Ne pas déranger",
+    offline: "⚫ Hors ligne"
+  };
+
+  let statusText = statusMap[member.presence.status] || "Hors ligne";
+
+  let platform = "Inconnu";
+  if (member.presence.clientStatus) {
+    if (member.presence.clientStatus.mobile) platform = "Mobile";
+    else if (member.presence.clientStatus.desktop) platform = "Ordinateur";
+    else if (member.presence.clientStatus.web) platform = "Web";
+  }
+
+  return { status: statusText, platform };
 }
 
 // ==================== KEEP-ALIVE ====================
@@ -269,13 +293,20 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // +ui – STYLE EXACTEMENT COMME TON IMAGE (structure propre)
+  // +ui – STYLE IDENTIQUE À TON IMAGE + VRAI STATUT ET PLATEFORME
   if (cmd === 'ui') {
     const target = message.mentions.members.first() || message.member;
     const user = target.user;
 
-    const createdDays = Math.floor((Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24));
-    const joinedDays = target.joinedTimestamp ? Math.floor((Date.now() - target.joinedTimestamp) / (1000 * 60 * 60 * 24)) : 0;
+    const { status, platform } = getStatusAndPlatform(target);
+
+    const createdStr = user.createdAt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const joinedStr = target.joinedAt ? target.joinedAt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : "Inconnu";
+
+    const createdAgo = Math.floor((Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24));
+    const joinedAgo = target.joinedAt ? Math.floor((Date.now() - target.joinedAt) / (1000 * 60 * 60 * 24)) : 0;
+
+    const roles = target.roles.cache.filter(r => r.id !== target.guild.id).map(r => r.toString()).join(" ") || "Aucun rôle";
 
     const embed = new EmbedBuilder()
       .setTitle(user.tag)
@@ -285,18 +316,18 @@ client.on('messageCreate', async message => {
         { name: "Compte", value: `@${user.username}`, inline: false },
         { name: "Pseudo", value: target.displayName, inline: false },
         { name: "Id", value: user.id, inline: false },
-        { name: "Activité/Statut", value: "Statut : 🔴 Ne pas déranger", inline: false },
-        { name: "Plateforme", value: "Plateforme : Ordinateur", inline: false },
+        { name: "Activité/Statut", value: `Statut : ${status}`, inline: false },
+        { name: "Plateforme", value: `Plateforme : ${platform}`, inline: false },
         { name: "Activité", value: "—", inline: false },
-        { name: "Vocal", value: "Pas en vocal", inline: false },
-        { name: "Dates", value: `Créé : ${user.createdAt.toLocaleDateString('fr-FR')} (il y a ${createdDays} jours)\nRejoint : ${target.joinedAt ? target.joinedAt.toLocaleDateString('fr-FR') : "Inconnu"} (il y a ${joinedDays} jours)`, inline: false },
-        { name: "Rôles", value: target.roles.cache.filter(r => r.id !== target.guild.id).map(r => r.toString()).join(" ") || "Aucun rôle", inline: false }
+        { name: "Vocal", value: target.voice?.channel ? "En vocal" : "Pas en vocal", inline: false },
+        { name: "Dates", value: `Créé : ${createdStr} (il y a ${createdAgo} jours)\nRejoint : ${joinedStr} (il y a ${joinedAgo} jours)`, inline: false },
+        { name: "Rôles", value: roles, inline: false }
       );
 
     return message.channel.send({ embeds: [embed] });
   }
 
-  // +jail (déjà corrigé précédemment)
+  // +jail (conservé)
   if (cmd === 'jail') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
 
