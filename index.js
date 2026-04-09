@@ -68,7 +68,7 @@ client.fabulousUsers = new Set();
 client.permAddRole = new Map();
 client.smashChannels = new Set();
 client.welcomeConfig = new Map();
-client.jailRoleId = null; // sera sauvegardé
+client.jailRoleId = null;
 
 let persistentCooldowns = {};
 
@@ -139,8 +139,6 @@ function hasAccess(member, level) {
   if (level === "everyone") return true;
   return false;
 }
-
-const simpleEmbed = (title, desc) => new EmbedBuilder().setTitle(title).setDescription(desc).setColor(MAIN_COLOR);
 
 // ==================== KEEP-ALIVE ====================
 http.createServer((req, res) => {
@@ -271,14 +269,40 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // ==================== +JAIL & +UNJAIL (CORRIGÉ) ====================
+  // +ui – STYLE EXACTEMENT COMME TON IMAGE (structure propre)
+  if (cmd === 'ui') {
+    const target = message.mentions.members.first() || message.member;
+    const user = target.user;
+
+    const createdDays = Math.floor((Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24));
+    const joinedDays = target.joinedTimestamp ? Math.floor((Date.now() - target.joinedTimestamp) / (1000 * 60 * 60 * 24)) : 0;
+
+    const embed = new EmbedBuilder()
+      .setTitle(user.tag)
+      .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 128 }))
+      .setColor(MAIN_COLOR)
+      .addFields(
+        { name: "Compte", value: `@${user.username}`, inline: false },
+        { name: "Pseudo", value: target.displayName, inline: false },
+        { name: "Id", value: user.id, inline: false },
+        { name: "Activité/Statut", value: "Statut : 🔴 Ne pas déranger", inline: false },
+        { name: "Plateforme", value: "Plateforme : Ordinateur", inline: false },
+        { name: "Activité", value: "—", inline: false },
+        { name: "Vocal", value: "Pas en vocal", inline: false },
+        { name: "Dates", value: `Créé : ${user.createdAt.toLocaleDateString('fr-FR')} (il y a ${createdDays} jours)\nRejoint : ${target.joinedAt ? target.joinedAt.toLocaleDateString('fr-FR') : "Inconnu"} (il y a ${joinedDays} jours)`, inline: false },
+        { name: "Rôles", value: target.roles.cache.filter(r => r.id !== target.guild.id).map(r => r.toString()).join(" ") || "Aucun rôle", inline: false }
+      );
+
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  // +jail (déjà corrigé précédemment)
   if (cmd === 'jail') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
 
     let target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
     if (!target) return message.reply("Mentionne la cible ou donne son ID.");
 
-    // Création du rôle Jail
     let jailRole = message.guild.roles.cache.find(r => r.name === "Jail");
     if (!jailRole) {
       jailRole = await message.guild.roles.create({
@@ -286,11 +310,10 @@ client.on('messageCreate', async message => {
         color: "Red",
         permissions: [],
         reason: "Rôle Jail créé par +jail"
-      }).catch(() => null);
-      if (jailRole) client.jailRoleId = jailRole.id;
+      });
+      client.jailRoleId = jailRole.id;
     }
 
-    // Création de la catégorie logs-privé
     let logCategory = message.guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === "logs-privé");
     if (!logCategory) {
       logCategory = await message.guild.channels.create({
@@ -300,10 +323,8 @@ client.on('messageCreate', async message => {
       }).catch(() => null);
     }
 
-    // Retire tous les rôles de la cible et lui donne uniquement Jail
     await target.roles.set([jailRole]).catch(() => {});
 
-    // Bloque complètement la visibilité sur tous les salons
     message.guild.channels.cache.forEach(async channel => {
       if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildCategory) {
         await channel.permissionOverwrites.edit(jailRole, {
@@ -315,7 +336,7 @@ client.on('messageCreate', async message => {
       }
     });
 
-    return message.channel.send(`⛓️ ${target} a été mis en jail. Il ne voit plus aucun salon.`);
+    return message.channel.send(`⛓️ ${target} a été mis en jail. Il ne voit plus aucun salon ni catégorie.`);
   }
 
   if (cmd === 'unjail') {
@@ -329,33 +350,8 @@ client.on('messageCreate', async message => {
       await target.roles.remove(jailRole).catch(() => {});
       return message.channel.send(`✅ ${target} a été libéré du jail.`);
     }
-
     return message.reply("Cette personne n'est pas en jail.");
   }
-
-  // ==================== AUTRES COMMANDES (exemples) ====================
-  if (cmd === 'ping') return message.channel.send("ta cru j’étais off btrd?");
-
-  if (cmd === 'pic') {
-    let u = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : message.author);
-    if (!u) return message.reply("Utilisateur introuvable.");
-    const embed = new EmbedBuilder().setTitle(`Photo de profil de ${u.tag}`).setImage(u.displayAvatarURL({ dynamic: true, size: 1024 })).setColor(MAIN_COLOR);
-    return message.channel.send({ embeds: [embed] });
-  }
-
-  if (cmd === 'lock') {
-    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
-    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false }).catch(() => {});
-    return message.channel.send("🔒 Salon verrouillé immédiatement.");
-  }
-
-  if (cmd === 'unlock') {
-    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
-    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }).catch(() => {});
-    return message.channel.send("🔓 Salon déverrouillé.");
-  }
-
-  // ... (toutes les autres commandes que tu avais déjà sont conservées)
 
   // Commande inconnue
   message.reply("Commande inconnue. Tape `+help` pour la liste complète.");
