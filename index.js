@@ -199,13 +199,14 @@ client.on('messageCreate', async message => {
     message.startThread({ name: "Avis smash/pass", autoArchiveDuration: 1440 }).catch(() => {});
   }
 
-  if (!message.content.startsWith('+')) return;
+  if (!message.content.startsWith('+') || message.author.bot) return;
+
   const args = message.content.slice(1).trim().split(/ +/);
   const cmd = args.shift().toLowerCase();
   const authorId = message.author.id;
   const member = message.member;
 
-  // ==================== +HELP – TOUTES LES COMMANDES ====================
+  // +help – TOUTES LES COMMANDES
   if (cmd === 'help') {
     const embed = new EmbedBuilder()
       .setTitle("Commandes disponibles")
@@ -230,7 +231,7 @@ client.on('messageCreate', async message => {
         `+flood ID @user <10> → Spam phrases\n` +
         `+mybotserv → Liste des serveurs du bot\n` +
         `+joinsbot ID → Bot rejoint le vocal\n` +
-        `+setprefix → Change le préfixe (avec confirmation)\n` +
+        `+setprefix → Change le préfixe\n` +
         `+backup save/load → Sauvegarde / charge la backup\n` +
         `+antiraid → Active l'anti-raid ultra puissant\n` +
         `+dmall <message> → Envoie MP à tout le serveur (owner only)\n` +
@@ -260,7 +261,7 @@ client.on('messageCreate', async message => {
         `+limitrole @role <max> → Limite un rôle\n` +
         `+addrole @user @role → Ajoute rôle\n` +
         `+delrole @user @role → Retire rôle\n` +
-        `+derank @user → Retire tous les rôles\n`
+        `+derank @user → Retire tous les rôles`
       );
     return message.channel.send({ embeds: [embed] });
   }
@@ -444,10 +445,10 @@ client.on('messageCreate', async message => {
     return message.channel.send("✅ DMALL lancé (owner only).");
   }
 
-  // Ajoute ici les autres commandes si besoin (permmv, pv, jail, etc.)
-  // Pour l'instant, toutes les commandes de base fonctionnent.
+  // Ajoute ici d'autres commandes si tu veux (permmv, pv, jail, etc.)
+  // Pour l'instant, les commandes de base fonctionnent toutes.
 
-  return; // ignore les commandes inconnues
+  message.reply("Commande inconnue. Tape `+help` pour la liste complète.");
 });
 
 // ==================== READY ====================
