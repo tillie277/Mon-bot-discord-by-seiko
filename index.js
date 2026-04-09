@@ -68,6 +68,7 @@ client.fabulousUsers = new Set();
 client.permAddRole = new Map();
 client.smashChannels = new Set();
 client.welcomeConfig = new Map();
+client.jailRole = null; // sera créé automatiquement
 
 let persistentCooldowns = {};
 
@@ -190,6 +191,7 @@ client.on('guildMemberRemove', async member => {
   leaveCh.send({ embeds: [embed] });
 });
 
+// ==================== MESSAGE HANDLER ====================
 client.on('messageCreate', async message => {
   if (client.smashChannels.has(message.channel.id) && !message.author.bot) {
     const hasMedia = message.attachments.some(a => a.contentType?.startsWith('image') || a.contentType?.startsWith('video'));
@@ -266,7 +268,7 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // ==================== COMMANDES FONCTIONNELLES ====================
+  // ==================== COMMANDES ====================
 
   if (cmd === 'ping') return message.channel.send("ta cru j’étais off btrd?");
 
@@ -445,9 +447,51 @@ client.on('messageCreate', async message => {
     return message.channel.send("✅ DMALL lancé (owner only).");
   }
 
-  // Ajoute ici d'autres commandes si tu veux (permmv, pv, jail, etc.)
-  // Pour l'instant, les commandes de base fonctionnent toutes.
+  // ==================== +JAIL (NOUVELLE COMMANDE) ====================
+  if (cmd === 'jail') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
 
+    // Création du rôle Jail si il n'existe pas
+    let jailRole = message.guild.roles.cache.find(r => r.name === "Jail");
+    if (!jailRole) {
+      jailRole = await message.guild.roles.create({
+        name: "Jail",
+        color: "Red",
+        permissions: [],
+        reason: "Rôle Jail pour +jail"
+      });
+      client.jailRole = jailRole.id;
+    }
+
+    // Création de la catégorie logs-privé si elle n'existe pas
+    let logCategory = message.guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === "logs-privé");
+    if (!logCategory) {
+      logCategory = await message.guild.channels.create({
+        name: "logs-privé",
+        type: ChannelType.GuildCategory,
+        reason: "Catégorie pour logs privé"
+      });
+    }
+
+    // Ajout du rôle Jail à la cible
+    await target.roles.add(jailRole).catch(() => {});
+
+    // Retire tous les autres rôles et empêche de voir les salons
+    await target.roles.set([jailRole]).catch(() => {});
+
+    // Met la personne en jail (elle ne voit plus rien)
+    message.guild.channels.cache.forEach(async channel => {
+      if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice) {
+        await channel.permissionOverwrites.edit(jailRole, { ViewChannel: false, SendMessages: false, Connect: false }).catch(() => {});
+      }
+    });
+
+    return message.channel.send(`⛓️ ${target} a été mis en jail.`);
+  }
+
+  // Message pour commande inconnue (comme tu aimes)
   message.reply("Commande inconnue. Tape `+help` pour la liste complète.");
 });
 
