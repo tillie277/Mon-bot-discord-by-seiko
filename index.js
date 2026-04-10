@@ -236,6 +236,8 @@ client.on('messageCreate', async message => {
   const logs = await ensureLogChannels(message.guild);
   if (logs.commande) logs.commande.send(`📌 **${message.author}** a utilisé : \`${message.content}\``).catch(() => {});
 
+  // ==================== TOUTES LES COMMANDES DÉPLIÉES ICI ====================
+
   if (cmd === 'help') {
     const embed = new EmbedBuilder().setTitle("Commandes disponibles").setColor(MAIN_COLOR).setDescription(
       `+pic @user → Voir photo de profil\n` +
@@ -284,32 +286,19 @@ client.on('messageCreate', async message => {
       `+limitrole @role <max> → Limite rôle\n` +
       `+Permaddrole @role <count> → Perm +addrole\n` +
       `+delpermaddrole @role → Retire perm +addrole\n` +
-      `+fabulousbot @user → Fabulousbot`
+      `+fabulousbot @user → Fabulousbot\n` +
+      `+invitelogger → Active Invite Logger`
     );
     return message.channel.send({ embeds: [embed] });
   }
 
-  if (cmd === 'wl') {
-    if (!isOwner(authorId)) return message.reply("Seul Owner.");
-    const target = message.mentions.users.first() || args[0];
-    if (!target) return message.reply("Mentionne ou donne l'ID.");
-    const id = target.id || target;
-    client.whitelist.add(id);
+  if (cmd === 'invitelogger') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    client.inviteLoggerChannel = message.channel.id;
     persistAll();
-    return message.channel.send(`✅ ${target} ajouté à la whitelist.`);
+    return message.channel.send("✅ Invite Logger activé dans ce salon.");
   }
 
-  if (cmd === 'admin') {
-    if (!isOwner(authorId)) return message.reply("Seul Owner.");
-    const target = message.mentions.users.first() || args[0];
-    if (!target) return message.reply("Mentionne ou donne l'ID.");
-    const id = target.id || target;
-    client.adminUsers.add(id);
-    persistAll();
-    return message.channel.send(`✅ ${target} ajouté aux admins.`);
-  }
-
-  // ==================== +DMALL CORRIGÉ (VRAIE PROGRESSION + ENVOI DM) ====================
   if (cmd === 'dmall') {
     if (!isOwner(authorId)) return message.reply("Seul Owner.");
     const msg = args.join(' ');
@@ -317,7 +306,6 @@ client.on('messageCreate', async message => {
 
     const ownerUser = await client.users.fetch(OWNER_ID).catch(() => null);
 
-    // Début
     message.channel.send("dmall lancer").catch(() => {});
     if (ownerUser) ownerUser.send("dmall lancer").catch(() => {});
 
@@ -331,12 +319,9 @@ client.on('messageCreate', async message => {
       try {
         await m.send(msg);
         sent++;
-      } catch (e) {
-        // Ignorer les erreurs (DM fermés, etc.)
-      }
+      } catch (e) {}
       count++;
 
-      // Mise à jour toutes les 10 membres ou à la fin
       if ((i + 1) % 10 === 0 || i === members.length - 1) {
         const progress = Math.round((sent / total) * 100);
         const progressMsg = `Progression : ${progress}% (${sent}/${total})`;
@@ -347,7 +332,6 @@ client.on('messageCreate', async message => {
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    // Fin
     const finishMsg = `Dmall finis boss\n${sent} messages envoyés sur ${total} membres.`;
     message.channel.send(finishMsg).catch(() => {});
     if (ownerUser) ownerUser.send(finishMsg).catch(() => {});
@@ -500,20 +484,6 @@ client.on('messageCreate', async message => {
     return message.channel.send(`✅ Message envoyé. Ajoute tes réactions. Chaque réaction donnera un rôle différent.`);
   }
 
-  if (cmd === 'flood') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
-    const ch = message.guild.channels.cache.get(args[0]);
-    if (!ch) return message.reply("Salon introuvable.");
-    const count = Math.min(10, parseInt(args[2]) || 5);
-    const phrases = ["AHHAH OHOHOH AHHAAH OHOHO HAHA OHOH HAHA OHOH H AHHA     HOOHOOOAAOO","FERME TA CHATTE FERME TA CHATTE SALE CHIENNASSE SUCEUSE DE BITES TA PTITE SOEUR LA CATIN D'CHIENNE TROU DU CUL SALE CHIENNASSE SALE CHIENNASSE ENFANT DE CATIN","PTITE PUTE FILS DE PUTE GRANDE LANGUEUSE TA GUEULE ENFANT DE VI@LE TA MERE LA PUTE TROU DU CUL PTITE PUTE TA MERE LA PUTE","SALE CHIENNASSE TA SAINTE PUTE DE MERE TA MERE LA PUTE TA MERE LA PUTE ENFANT DE CATIN QUE TU ES FERME TA CHATTE QUE TU ES","SUCE BITE SUCE FLUTE SUCE ARTICHAUD SUCE TOUT SUCE SALOPE SUCE TRANS TG MEC EN KARANSSE","TA LA GEULE A ZW TETE DE BITE T PAS BEAU JE TE QUITTEEEEEEE","JE TE BZ TA PUTE DE MERE ESPECE DE GRANDE PUTE"];
-    for (let i = 0; i < count; i++) {
-      const text = phrases[Math.floor(Math.random() * phrases.length)] + ` <@${args[1]?.replace(/[<@>]/g, '')}>`;
-      ch.send(text).catch(() => {});
-      await new Promise(r => setTimeout(r, 300));
-    }
-    return message.channel.send("✅ Flood terminé.");
-  }
-
   if (cmd === 'lock') {
     if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
     await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false }).catch(() => {});
@@ -525,6 +495,8 @@ client.on('messageCreate', async message => {
     await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }).catch(() => {});
     return message.channel.send("🔓 Salon déverrouillé.");
   }
+
+  if (cmd === 'ping') return message.channel.send("ta cru j’étais off btrd?");
 
   message.reply("Commande inconnue. Tape `+help` pour la liste complète.");
 });
