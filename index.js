@@ -224,7 +224,6 @@ client.on('messageCreate', async message => {
     message.startThread({ name: "Avis smash/pass", autoArchiveDuration: 1440 }).catch(() => {});
   }
 
-  // Mention du bot (seulement si ce n’est pas une commande)
   const isCommand = message.content.startsWith('+');
   if (message.mentions.has(client.user) && !isCommand) {
     if (message.author.id === OWNER_ID) return message.reply("salut boss.");
@@ -328,21 +327,34 @@ client.on('messageCreate', async message => {
     return message.channel.send(`✅ ${target} ajouté aux admins.`);
   }
 
-  // +dmall avec délai 1000ms
+  // +dmall avec progression et message final en MP
   if (cmd === 'dmall') {
     if (!isOwner(authorId)) return message.reply("Seul Owner.");
     const msg = args.join(' ');
     if (!msg) return message.reply("Donne le message à envoyer.");
+
+    const ownerUser = await client.users.fetch(OWNER_ID).catch(() => null);
+    if (ownerUser) ownerUser.send("dmall lancer").catch(() => {});
+
     let count = 0;
+    const total = message.guild.memberCount;
     const members = [...message.guild.members.cache.values()].filter(m => !m.user.bot);
-    for (const m of members) {
+
+    for (let i = 0; i < members.length; i++) {
+      const m = members[i];
       try {
         await m.send(msg);
         count++;
-        await new Promise(r => setTimeout(r, 1000));
       } catch (e) {}
+      if (i % 10 === 0 && ownerUser) {
+        const progress = Math.round((count / total) * 100);
+        ownerUser.send(`Progression : ${progress}% (${count}/${total})`).catch(() => {});
+      }
+      await new Promise(r => setTimeout(r, 1000));
     }
-    return message.channel.send(`✅ Message envoyé en privé à ${count} membres.`);
+
+    if (ownerUser) ownerUser.send("Dmall finis boss").catch(() => {});
+    return message.channel.send(`✅ Dmall terminé (${count} membres).`);
   }
 
   // +ping
@@ -407,7 +419,7 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // +ui
+  // +ui (complet)
   if (cmd === 'ui') {
     const target = message.mentions.members.first() || message.member;
     const user = target.user;
@@ -435,7 +447,7 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // +jail
+  // +jail (complet)
   if (cmd === 'jail') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
     let target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
