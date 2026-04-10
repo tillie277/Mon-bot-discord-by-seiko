@@ -57,7 +57,7 @@ client.adminUsers = new Set();
 client.blacklist = new Set();
 client.wetList = new Set();
 client.banList = new Set();
-client.dogs = new Map();
+client.dogs = new Map(); // targetId → {executorId, lockedName}
 client.permMvUsers = new Set();
 client.limitRoles = new Map();
 client.lockedNames = new Set();
@@ -71,7 +71,7 @@ client.permAddRole = new Map();
 client.smashChannels = new Set();
 client.welcomeConfig = new Map();
 client.jailRoleId = null;
-client.autorole = null; // rôle automatique à l'arrivée
+client.autorole = null;
 
 let persistentCooldowns = {};
 
@@ -164,9 +164,7 @@ async function ensureLogChannels(guild) {
   const out = {};
   for (const name of names) {
     let ch = guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildText);
-    if (!ch) {
-      ch = await guild.channels.create({ name, type: ChannelType.GuildText, reason: 'Logs par bot' }).catch(() => null);
-    }
+    if (!ch) ch = await guild.channels.create({ name, type: ChannelType.GuildText, reason: 'Logs par bot' }).catch(() => null);
     out[name.replace('-logs', '')] = ch;
   }
   return out;
@@ -218,13 +216,11 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 });
 
 client.on('guildMemberAdd', async member => {
-  // Autorole
   if (client.autorole) {
     const role = member.guild.roles.cache.get(client.autorole);
     if (role) await member.roles.add(role).catch(() => {});
   }
 
-  // InviteLogger
   if (!client.inviteLoggerChannel) return;
   const ch = member.guild.channels.cache.get(client.inviteLoggerChannel);
   if (!ch) return;
@@ -291,6 +287,7 @@ client.on('messageCreate', async message => {
         `+unlock → Déverrouille salon (WL/Admin)\n` +
         `+dog @user → Verrouille pseudo avec 🐕 (WL/Owner)\n` +
         `+undog @user → Libère le dog (WL/Owner)\n` +
+        `+undogall → Libère tous les dogs\n` +
         `+wet @user → Ban spécial (WL/Owner)\n` +
         `+unwet @user → Dé-wet (WL/Owner)\n` +
         `+bl @user → Blacklist + DM (WL/Admin/Owner)\n` +
@@ -376,6 +373,53 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
+  // +dog – format exact (🦮 @executeur)
+  if (cmd === 'dog') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    if (target.id === authorId) return message.reply("Tu ne peux pas te mettre toi-même en dog.");
+    const executorDisplay = message.member.displayName;
+    const lockedName = `${target.displayName} (🦮 ${executorDisplay})`;
+    client.dogs.set(target.id, { executorId: authorId, lockedName });
+    client.lockedNames.add(target.id);
+    persistAll();
+    await target.setNickname(lockedName).catch(() => {});
+    return message.channel.send(`🐕 ${target} a été mis en laisse par ${executorDisplay}.`);
+  }
+
+  // +undog
+  if (cmd === 'undog') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
+    if (!target) return message.reply("Mentionne la cible ou donne son ID.");
+    if (!client.dogs.has(target.id)) return message.reply("Ce membre n'est pas en laisse.");
+    const info = client.dogs.get(target.id);
+    if (info.executorId !== authorId && !isWL(authorId) && !isOwner(authorId)) return message.reply("Tu n'es pas le maître de ce dog.");
+    client.dogs.delete(target.id);
+    client.lockedNames.delete(target.id);
+    persistAll();
+    await target.setNickname(null).catch(() => {});
+    return message.channel.send(`✅ ${target.displayName} a été libéré.`);
+  }
+
+  // +undogall
+  if (cmd === 'undogall') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    let count = 0;
+    client.dogs.forEach((info, dogId) => {
+      const dog = message.guild.members.cache.get(dogId);
+      if (dog) {
+        dog.setNickname(null).catch(() => {});
+        count++;
+      }
+      client.lockedNames.delete(dogId);
+    });
+    client.dogs.clear();
+    persistAll();
+    return message.channel.send(`✅ ${count} dogs ont été libérés.`);
+  }
+
   // +jail
   if (cmd === 'jail') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
@@ -452,8 +496,6 @@ client.on('messageCreate', async message => {
     const text = args.join(' ');
     if (!text) return message.reply("Donne le message à envoyer.");
     const sent = await message.channel.send(text);
-    // Le bot envoie le message. Tu ajoutes les réactions manuellement.
-    // Chaque réaction donnera un rôle différent (tu peux ajouter plusieurs réactions).
     return message.channel.send(`✅ Message envoyé. Ajoute tes réactions. Chaque réaction donnera un rôle différent.`);
   }
 
@@ -472,66 +514,6 @@ client.on('messageCreate', async message => {
     if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
     await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }).catch(() => {});
     return message.channel.send("🔓 Salon déverrouillé.");
-  }
-
-  // +dog
-  if (cmd === 'dog') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
-    const target = message.mentions.members.first();
-    if (!target) return message.reply("Mentionne la cible.");
-    const locked = `${target.displayName} (🐕 ${message.member.displayName})`;
-    client.dogs.set(target.id, { executorId: authorId, lockedName: locked });
-    client.lockedNames.add(target.id);
-    persistAll();
-    await target.setNickname(locked).catch(() => {});
-    return message.channel.send(`🐕 ${target} en laisse.`);
-  }
-
-  // +undog
-  if (cmd === 'undog') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
-    const target = message.mentions.members.first();
-    if (!client.dogs.has(target.id)) return message.reply("Pas en laisse.");
-    client.dogs.delete(target.id);
-    client.lockedNames.delete(target.id);
-    persistAll();
-    await target.setNickname(null).catch(() => {});
-    return message.channel.send("✅ Libéré.");
-  }
-
-  // +wet
-  if (cmd === 'wet') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
-    const target = message.mentions.members.first();
-    if (!target) return message.reply("Mentionne la cible.");
-    if (target.id === OWNER_ID || client.whitelist.has(target.id)) return message.reply("Impossible sur supérieur.");
-    client.wetList.add(target.id);
-    persistAll();
-    await target.ban({ reason: "Wet" }).catch(() => {});
-    return message.channel.send(`⚠️ ${target} wet.`);
-  }
-
-  // +unwet
-  if (cmd === 'unwet') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Attention à toi tu essaie de unban un utilisateur qui a été Wet par un Sys+.");
-    const id = args[0] || message.mentions.users.first()?.id;
-    if (!client.wetList.has(id)) return message.reply("Pas wet.");
-    client.wetList.delete(id);
-    persistAll();
-    await message.guild.members.unban(id).catch(() => {});
-    return message.channel.send("✅ Dé-wet.");
-  }
-
-  // +bl
-  if (cmd === 'bl') {
-    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
-    const target = message.mentions.members.first();
-    if (!target) return message.reply("Mentionne la cible.");
-    client.blacklist.add(target.id);
-    persistAll();
-    await target.ban({ reason: "Blacklist" }).catch(() => {});
-    try { await target.send(`Tu as été blacklisté\nRaison: ${args.slice(1).join(' ') || "non fournie"}`); } catch {}
-    return message.channel.send(`✅ ${target} blacklisté.`);
   }
 
   // +flood
