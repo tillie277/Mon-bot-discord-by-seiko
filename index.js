@@ -270,7 +270,8 @@ client.on('messageCreate', async message => {
         `+mv @user → Déplace en vocal\n` +
         `+wakeup @user <times> → Réveille quelqu'un\n` +
         `+snap @user → Demande snap\n` +
-        `+clear <nombre> ou @user → Supprime messages\n` +
+        `+clear @user <nombre> → Supprime jusqu'à 500 messages d'un utilisateur\n` +
+        `+clear <nombre> → Supprime les derniers messages du salon\n` +
         `+slowmode <secondes> → Mode lent\n` +
         `+ping → Répond\n` +
         `+welcome ID <message> → Configure message de bienvenue\n` +
@@ -283,7 +284,7 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // +ui – IDENTIQUE À TON IMAGE
+  // +ui
   if (cmd === 'ui') {
     const target = message.mentions.members.first() || message.member;
     const user = target.user;
@@ -573,14 +574,6 @@ client.on('messageCreate', async message => {
     return message.channel.send(`✅ ${count} utilisateurs débannis (les +bl restent protégés).`);
   }
 
-  // +pv
-  if (cmd === 'pv') {
-    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
-    const vc = member.voice.channel;
-    if (!vc) return message.reply("Tu dois être en vocal.");
-    return message.channel.send("✅ Vocal privé activé (implémentation complète disponible sur demande).");
-  }
-
   // +mutealls
   if (cmd === 'mutealls') {
     if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
@@ -647,12 +640,40 @@ client.on('messageCreate', async message => {
     return message.channel.send("✅ Snap envoyé.");
   }
 
-  // +clear
+  // +clear @cible <nombre> (MAX 500)
   if (cmd === 'clear') {
     if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
-    const amount = parseInt(args[0]) || 10;
-    await message.channel.bulkDelete(Math.min(amount, 100)).catch(() => {});
-    return message.channel.send(`✅ ${amount} messages supprimés.`).then(m => setTimeout(() => m.delete(), 3000));
+
+    let targetUser = message.mentions.users.first();
+    let amount = parseInt(args[0]);
+
+    if (targetUser) {
+      // clear messages d'un utilisateur spécifique
+      amount = parseInt(args[1]) || 100;
+    } else {
+      // clear derniers messages du salon
+      amount = parseInt(args[0]) || 100;
+    }
+
+    amount = Math.min(500, Math.max(1, amount));
+
+    try {
+      let messages = await message.channel.messages.fetch({ limit: 100 });
+      let toDelete = [];
+
+      if (targetUser) {
+        toDelete = messages.filter(m => m.author.id === targetUser.id).first(amount);
+      } else {
+        toDelete = messages.first(amount);
+      }
+
+      if (toDelete.size === 0) return message.reply("Aucun message trouvé à supprimer.");
+
+      await message.channel.bulkDelete(toDelete, true);
+      return message.channel.send(`✅ ${toDelete.size} messages supprimés.`).then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
+    } catch (e) {
+      return message.reply("Erreur lors de la suppression des messages (limite Discord ou permissions).");
+    }
   }
 
   // +slowmode
