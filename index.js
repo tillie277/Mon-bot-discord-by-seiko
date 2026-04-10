@@ -170,7 +170,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   }
 });
 
-// Keep-alive Render
+// Keep-alive
 http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Bot is alive'); }).listen(PORT, '0.0.0.0', () => console.log(`✅ Keep-alive on port ${PORT}`));
 setInterval(() => { try { https.get(EXTERNAL_PING_URL).on('error', () => {}); } catch (e) {} }, 300000);
 
@@ -224,7 +224,9 @@ client.on('messageCreate', async message => {
     message.startThread({ name: "Avis smash/pass", autoArchiveDuration: 1440 }).catch(() => {});
   }
 
-  if (message.mentions.has(client.user)) {
+  // Mention du bot (seulement si ce n’est pas une commande)
+  const isCommand = message.content.startsWith('+');
+  if (message.mentions.has(client.user) && !isCommand) {
     if (message.author.id === OWNER_ID) return message.reply("salut boss.");
     else return message.reply("ftg sale grosse keh reste a ta place d’excrément.");
   }
@@ -389,6 +391,22 @@ client.on('messageCreate', async message => {
     return message.channel.send(`✅ ${count} dogs ont été libérés.`);
   }
 
+  // +rolemembers
+  if (cmd === 'rolemembers') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const role = message.mentions.roles.first();
+    if (!role) return message.reply("Mentionne le rôle.");
+    const membersWithRole = role.members.map(m => m.toString());
+    const count = membersWithRole.length;
+    const embed = new EmbedBuilder()
+      .setTitle("Liste des membres du rôle")
+      .setDescription(`Il y a ${count} personne${count > 1 ? 's' : ''} possédant le rôle ${role}`)
+      .setColor(MAIN_COLOR)
+      .setTimestamp();
+    if (count > 0) embed.addFields({ name: "Membres", value: membersWithRole.join("\n") || "Aucun" });
+    return message.channel.send({ embeds: [embed] });
+  }
+
   // +ui
   if (cmd === 'ui') {
     const target = message.mentions.members.first() || message.member;
@@ -417,22 +435,6 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // +rolemembers
-  if (cmd === 'rolemembers') {
-    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
-    const role = message.mentions.roles.first();
-    if (!role) return message.reply("Mentionne le rôle.");
-    const membersWithRole = role.members.map(m => m.toString());
-    const count = membersWithRole.length;
-    const embed = new EmbedBuilder()
-      .setTitle("Liste des membres du rôle")
-      .setDescription(`Il y a ${count} personne${count > 1 ? 's' : ''} possédant le rôle ${role}`)
-      .setColor(MAIN_COLOR)
-      .setTimestamp();
-    if (count > 0) embed.addFields({ name: "Membres", value: membersWithRole.join("\n") || "Aucun" });
-    return message.channel.send({ embeds: [embed] });
-  }
-
   // +jail
   if (cmd === 'jail') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
@@ -453,7 +455,7 @@ client.on('messageCreate', async message => {
         await channel.permissionOverwrites.edit(jailRole, { ViewChannel: false, SendMessages: false, Connect: false, ReadMessageHistory: false }).catch(() => {});
       }
     });
-    return message.channel.send(`⛓️ ${target} a été mis en jail. Il ne voit plus aucun salon ni catégorie.`);
+    return message.channel.send(`⛓️ ${target} a été mis en jail.`);
   }
 
   if (cmd === 'unjail') {
@@ -510,15 +512,7 @@ client.on('messageCreate', async message => {
     const ch = message.guild.channels.cache.get(args[0]);
     if (!ch) return message.reply("Salon introuvable.");
     const count = Math.min(10, parseInt(args[2]) || 5);
-    const phrases = [
-      "AHHAH OHOHOH AHHAAH OHOHO HAHA OHOH HAHA OHOH H AHHA     HOOHOOOAAOO",
-      "FERME TA CHATTE FERME TA CHATTE SALE CHIENNASSE SUCEUSE DE BITES TA PTITE SOEUR LA CATIN D'CHIENNE TROU DU CUL SALE CHIENNASSE SALE CHIENNASSE ENFANT DE CATIN",
-      "PTITE PUTE FILS DE PUTE GRANDE LANGUEUSE TA GUEULE ENFANT DE VI@LE TA MERE LA PUTE TROU DU CUL PTITE PUTE TA MERE LA PUTE",
-      "SALE CHIENNASSE TA SAINTE PUTE DE MERE TA MERE LA PUTE TA MERE LA PUTE ENFANT DE CATIN QUE TU ES FERME TA CHATTE QUE TU ES",
-      "SUCE BITE SUCE FLUTE SUCE ARTICHAUD SUCE TOUT SUCE SALOPE SUCE TRANS TG MEC EN KARANSSE",
-      "TA LA GEULE A ZW TETE DE BITE T PAS BEAU JE TE QUITTEEEEEEE",
-      "JE TE BZ TA PUTE DE MERE ESPECE DE GRANDE PUTE"
-    ];
+    const phrases = ["AHHAH OHOHOH AHHAAH OHOHO HAHA OHOH HAHA OHOH H AHHA     HOOHOOOAAOO","FERME TA CHATTE FERME TA CHATTE SALE CHIENNASSE SUCEUSE DE BITES TA PTITE SOEUR LA CATIN D'CHIENNE TROU DU CUL SALE CHIENNASSE SALE CHIENNASSE ENFANT DE CATIN","PTITE PUTE FILS DE PUTE GRANDE LANGUEUSE TA GUEULE ENFANT DE VI@LE TA MERE LA PUTE TROU DU CUL PTITE PUTE TA MERE LA PUTE","SALE CHIENNASSE TA SAINTE PUTE DE MERE TA MERE LA PUTE TA MERE LA PUTE ENFANT DE CATIN QUE TU ES FERME TA CHATTE QUE TU ES","SUCE BITE SUCE FLUTE SUCE ARTICHAUD SUCE TOUT SUCE SALOPE SUCE TRANS TG MEC EN KARANSSE","TA LA GEULE A ZW TETE DE BITE T PAS BEAU JE TE QUITTEEEEEEE","JE TE BZ TA PUTE DE MERE ESPECE DE GRANDE PUTE"];
     for (let i = 0; i < count; i++) {
       const text = phrases[Math.floor(Math.random() * phrases.length)] + ` <@${args[1]?.replace(/[<@>]/g, '')}>`;
       ch.send(text).catch(() => {});
