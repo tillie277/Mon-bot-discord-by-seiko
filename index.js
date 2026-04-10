@@ -236,7 +236,6 @@ client.on('messageCreate', async message => {
   const logs = await ensureLogChannels(message.guild);
   if (logs.commande) logs.commande.send(`📌 **${message.author}** a utilisé : \`${message.content}\``).catch(() => {});
 
-  // +help
   if (cmd === 'help') {
     const embed = new EmbedBuilder().setTitle("Commandes disponibles").setColor(MAIN_COLOR).setDescription(
       `+pic @user → Voir photo de profil\n` +
@@ -250,53 +249,42 @@ client.on('messageCreate', async message => {
       `+unwet @user → Dé-wet (WL/Owner)\n` +
       `+bl @user → Blacklist + DM (WL/Admin/Owner)\n` +
       `+unbl @user → Dé-blacklist (WL/Admin/Owner)\n` +
-      `+baninfo → Infos bannissement\n` +
-      `+blinfo → Infos blacklist\n` +
-      `+invitelogger ID → Active logs joins/leaves\n` +
       `+ui @user → Infos utilisateur\n` +
       `+snipe → Dernier message supprimé (images/vidéos)\n` +
       `+smash → Active mode smash dans le salon\n` +
       `+flood ID @user <10> → Spam phrases\n` +
       `+mybotserv → Liste des serveurs du bot\n` +
       `+joinsbot ID → Bot rejoint le vocal\n` +
-      `+setprefix → Change le préfixe\n` +
-      `+backup save/load → Sauvegarde / charge la backup\n` +
-      `+antiraid → Active l'anti-raid ultra puissant\n` +
       `+dmall <message> → Envoie MP à tout le serveur (owner only)\n` +
       `+wl @user → Ajoute à la whitelist (owner only)\n` +
       `+admin @user → Ajoute admin (owner only)\n` +
-      `+permmv @role → Donne la perm +mv au rôle\n` +
-      `+delpermmv @role → Retire la perm +mv\n` +
-      `+PermmvRolelist → Liste des rôles avec perm mv\n` +
-      `+Permaddrole @role <count> → Donne perm +addrole avec limite\n` +
-      `+delpermaddrole @role → Retire la perm +addrole\n` +
-      `+fabulousbot @user → Autorise +dog +wakeup +mv sur owner bot\n` +
-      `+ghostjoins ID → Active ghost ping joins\n` +
-      `+unbanall → Débannit tout (protège les +bl)\n` +
-      `+pv → Rend le vocal privé\n` +
-      `+pvacces @user → Donne accès au vocal privé\n` +
-      `+unpvs → Rend tous les vocaux publics\n` +
       `+jail @user → Met en jail\n` +
       `+unjail @user → Enlève le rôle jail\n` +
-      `+mutealls → Mute tous les vocaux\n` +
-      `+randomvoc → Déplace aléatoirement dans les vocaux\n` +
-      `+say ID <message> → Envoie message dans un salon\n` +
+      `+clear @user <nombre> → Supprime jusqu'à 500 messages\n` +
+      `+autorole @role → Rôle automatique\n` +
+      `+sayroleselection <message> → Message avec réactions pour rôles\n` +
+      `+rolemembers @role → Liste des membres du rôle\n` +
+      `+ping → Répond\n` +
+      `+permmv @role → Perm +mv\n` +
       `+mv @user → Déplace en vocal\n` +
       `+wakeup @user <times> → Réveille quelqu'un\n` +
       `+snap @user → Demande snap\n` +
-      `+clear @user <nombre> → Supprime jusqu'à 500 messages d'un utilisateur\n` +
-      `+clear <nombre> → Supprime les derniers messages du salon\n` +
       `+slowmode <secondes> → Mode lent\n` +
-      `+ping → Répond\n` +
-      `+welcome ID <message> → Configure message de bienvenue\n` +
-      `+delchannel ID → Supprime un salon (WL/Owner)\n` +
-      `+limitrole @role <max> → Limite un rôle\n` +
+      `+derank @user → Dé-rank\n` +
       `+addrole @user @role → Ajoute rôle\n` +
       `+delrole @user @role → Retire rôle\n` +
-      `+derank @user → Retire tous les rôles\n` +
-      `+autorole @role → Rôle automatique à l'arrivée\n` +
-      `+sayroleselection <message> → Message avec réactions pour rôles\n` +
-      `+rolemembers @role → Liste des membres du rôle`
+      `+backup save/load → Backup\n` +
+      `+antiraid → Anti-raid\n` +
+      `+ghostjoins ID → Ghost joins\n` +
+      `+unbanall → Débannit tout\n` +
+      `+mutealls → Mute tous les vocaux\n` +
+      `+randomvoc → Déplace aléatoirement\n` +
+      `+say ID <message> → Envoie message\n` +
+      `+delchannel ID → Supprime salon\n` +
+      `+limitrole @role <max> → Limite rôle\n` +
+      `+Permaddrole @role <count> → Perm +addrole\n` +
+      `+delpermaddrole @role → Retire perm +addrole\n` +
+      `+fabulousbot @user → Fabulousbot`
     );
     return message.channel.send({ embeds: [embed] });
   }
@@ -321,6 +309,7 @@ client.on('messageCreate', async message => {
     return message.channel.send(`✅ ${target} ajouté aux admins.`);
   }
 
+  // ==================== +DMALL CORRIGÉ (VRAIE PROGRESSION + ENVOI DM) ====================
   if (cmd === 'dmall') {
     if (!isOwner(authorId)) return message.reply("Seul Owner.");
     const msg = args.join(' ');
@@ -328,10 +317,12 @@ client.on('messageCreate', async message => {
 
     const ownerUser = await client.users.fetch(OWNER_ID).catch(() => null);
 
+    // Début
     message.channel.send("dmall lancer").catch(() => {});
     if (ownerUser) ownerUser.send("dmall lancer").catch(() => {});
 
     let count = 0;
+    let sent = 0;
     const total = message.guild.memberCount;
     const members = [...message.guild.members.cache.values()].filter(m => !m.user.bot);
 
@@ -339,12 +330,16 @@ client.on('messageCreate', async message => {
       const m = members[i];
       try {
         await m.send(msg);
-        count++;
-      } catch (e) {}
+        sent++;
+      } catch (e) {
+        // Ignorer les erreurs (DM fermés, etc.)
+      }
+      count++;
 
+      // Mise à jour toutes les 10 membres ou à la fin
       if ((i + 1) % 10 === 0 || i === members.length - 1) {
-        const progress = Math.round((count / total) * 100);
-        const progressMsg = `Progression : ${progress}% (${count}/${total})`;
+        const progress = Math.round((sent / total) * 100);
+        const progressMsg = `Progression : ${progress}% (${sent}/${total})`;
         message.channel.send(progressMsg).catch(() => {});
         if (ownerUser) ownerUser.send(progressMsg).catch(() => {});
       }
@@ -352,7 +347,8 @@ client.on('messageCreate', async message => {
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    const finishMsg = "Dmall finis boss";
+    // Fin
+    const finishMsg = `Dmall finis boss\n${sent} messages envoyés sur ${total} membres.`;
     message.channel.send(finishMsg).catch(() => {});
     if (ownerUser) ownerUser.send(finishMsg).catch(() => {});
 
@@ -426,14 +422,14 @@ client.on('messageCreate', async message => {
     const roles = target.roles.cache.filter(r => r.id !== target.guild.id).map(r => r.toString()).join(" ") || "Aucun rôle";
     const embed = new EmbedBuilder()
       .setTitle(user.tag)
-      .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 128      .setColor(MAIN_COLOR)
+      .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 128 }))
+      .setColor(MAIN_COLOR)
       .addFields(
         { name: "Compte", value: `@${user.username}`, inline: false },
         { name: "Pseudo", value: target.displayName, inline: false },
         { name: "Id", value: user.id, inline: false },
         { name: "Activité/Statut", value: `Statut : ${status}`, inline: false },
         { name: "Plateforme", value: `Plateforme : ${platform}`, inline: false },
-        { name: "Activité", value: "—", inline: false },
         { name: "Vocal", value: target.voice?.channel ? "En vocal" : "Pas en vocal", inline: false },
         { name: "Dates", value: `Créé : ${createdStr} (il y a ${createdAgo} jours)\nRejoint : ${joinedStr} (il y a ${joinedAgo} jours)`, inline: false },
         { name: "Rôles", value: roles, inline: false }
@@ -449,10 +445,6 @@ client.on('messageCreate', async message => {
     if (!jailRole) {
       jailRole = await message.guild.roles.create({ name: "Jail", color: "Red", permissions: [], reason: "Rôle Jail créé par +jail" });
       client.jailRoleId = jailRole.id;
-    }
-    let logCategory = message.guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === "logs-privé");
-    if (!logCategory) {
-      logCategory = await message.guild.channels.create({ name: "logs-privé", type: ChannelType.GuildCategory, reason: "Catégorie logs privé" }).catch(() => null);
     }
     await target.roles.set([jailRole]).catch(() => {});
     message.guild.channels.cache.forEach(async channel => {
@@ -533,8 +525,6 @@ client.on('messageCreate', async message => {
     await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }).catch(() => {});
     return message.channel.send("🔓 Salon déverrouillé.");
   }
-
-  // Toutes les autres commandes demandées (+permmv, +PermmvRolelist, +Permaddrole, +delpermaddrole, +fabulousbot, +ghostjoins, +unbanall, +pv, +pvacces, +unpvs, +mutealls, +randomvoc, +say, +mv, +wakeup, +snap, +slowmode, +welcome, +delchannel, +limitrole, +addrole, +delrole, +derank, +backup, +antiraid, +mybotserv, +joinsbot, +setprefix, +snipe, +smash, +baninfo, +blinfo, +invitelogger, +banner, +pic, etc.) sont présentes et fonctionnelles dans ce code complet.
 
   message.reply("Commande inconnue. Tape `+help` pour la liste complète.");
 });
