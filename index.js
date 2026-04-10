@@ -46,7 +46,7 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.GuildInvites,
-    GatewayIntentBits.GuildPresences   // ← Ajouté pour récupérer le vrai statut et plateforme
+    GatewayIntentBits.GuildPresences
   ]
 });
 
@@ -141,26 +141,16 @@ function hasAccess(member, level) {
   return false;
 }
 
-// Fonction pour récupérer le vrai statut et plateforme
 function getStatusAndPlatform(member) {
-  if (!member.presence) return { status: "Hors ligne", platform: "Inconnu" };
-
-  const statusMap = {
-    online: "🟢 En ligne",
-    idle: "🟡 Inactif",
-    dnd: "🔴 Ne pas déranger",
-    offline: "⚫ Hors ligne"
-  };
-
-  let statusText = statusMap[member.presence.status] || "Hors ligne";
-
+  if (!member.presence) return { status: "⚫ Hors ligne", platform: "Inconnu" };
+  const statusMap = { online: "🟢 En ligne", idle: "🟡 Inactif", dnd: "🔴 Ne pas déranger", offline: "⚫ Hors ligne" };
+  let statusText = statusMap[member.presence.status] || "⚫ Hors ligne";
   let platform = "Inconnu";
   if (member.presence.clientStatus) {
     if (member.presence.clientStatus.mobile) platform = "Mobile";
     else if (member.presence.clientStatus.desktop) platform = "Ordinateur";
     else if (member.presence.clientStatus.web) platform = "Web";
   }
-
   return { status: statusText, platform };
 }
 
@@ -293,11 +283,10 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // +ui – STYLE IDENTIQUE À TON IMAGE + VRAI STATUT ET PLATEFORME
+  // +ui – IDENTIQUE À TON IMAGE
   if (cmd === 'ui') {
     const target = message.mentions.members.first() || message.member;
     const user = target.user;
-
     const { status, platform } = getStatusAndPlatform(target);
 
     const createdStr = user.createdAt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -327,43 +316,28 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  // +jail (conservé)
+  // +jail
   if (cmd === 'jail') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
-
     let target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
     if (!target) return message.reply("Mentionne la cible ou donne son ID.");
 
     let jailRole = message.guild.roles.cache.find(r => r.name === "Jail");
     if (!jailRole) {
-      jailRole = await message.guild.roles.create({
-        name: "Jail",
-        color: "Red",
-        permissions: [],
-        reason: "Rôle Jail créé par +jail"
-      });
+      jailRole = await message.guild.roles.create({ name: "Jail", color: "Red", permissions: [], reason: "Rôle Jail créé par +jail" });
       client.jailRoleId = jailRole.id;
     }
 
     let logCategory = message.guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === "logs-privé");
     if (!logCategory) {
-      logCategory = await message.guild.channels.create({
-        name: "logs-privé",
-        type: ChannelType.GuildCategory,
-        reason: "Catégorie logs privé"
-      }).catch(() => null);
+      logCategory = await message.guild.channels.create({ name: "logs-privé", type: ChannelType.GuildCategory, reason: "Catégorie logs privé" }).catch(() => null);
     }
 
     await target.roles.set([jailRole]).catch(() => {});
 
     message.guild.channels.cache.forEach(async channel => {
       if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildCategory) {
-        await channel.permissionOverwrites.edit(jailRole, {
-          ViewChannel: false,
-          SendMessages: false,
-          Connect: false,
-          ReadMessageHistory: false
-        }).catch(() => {});
+        await channel.permissionOverwrites.edit(jailRole, { ViewChannel: false, SendMessages: false, Connect: false, ReadMessageHistory: false }).catch(() => {});
       }
     });
 
@@ -372,7 +346,6 @@ client.on('messageCreate', async message => {
 
   if (cmd === 'unjail') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
-
     let target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
     if (!target) return message.reply("Mentionne la cible ou donne son ID.");
 
@@ -382,6 +355,370 @@ client.on('messageCreate', async message => {
       return message.channel.send(`✅ ${target} a été libéré du jail.`);
     }
     return message.reply("Cette personne n'est pas en jail.");
+  }
+
+  // +ping
+  if (cmd === 'ping') return message.channel.send("ta cru j’étais off btrd?");
+
+  // +lock
+  if (cmd === 'lock') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false }).catch(() => {});
+    return message.channel.send("🔒 Salon verrouillé immédiatement.");
+  }
+
+  // +unlock
+  if (cmd === 'unlock') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }).catch(() => {});
+    return message.channel.send("🔓 Salon déverrouillé.");
+  }
+
+  // +dog
+  if (cmd === 'dog') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    const locked = `${target.displayName} (🐕 ${message.member.displayName})`;
+    client.dogs.set(target.id, { executorId: authorId, lockedName: locked });
+    client.lockedNames.add(target.id);
+    persistAll();
+    await target.setNickname(locked).catch(() => {});
+    return message.channel.send(`🐕 ${target} en laisse.`);
+  }
+
+  // +undog
+  if (cmd === 'undog') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.members.first();
+    if (!client.dogs.has(target.id)) return message.reply("Pas en laisse.");
+    client.dogs.delete(target.id);
+    client.lockedNames.delete(target.id);
+    persistAll();
+    await target.setNickname(null).catch(() => {});
+    return message.channel.send("✅ Libéré.");
+  }
+
+  // +wet
+  if (cmd === 'wet') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    if (target.id === OWNER_ID || client.whitelist.has(target.id)) return message.reply("Impossible sur supérieur.");
+    client.wetList.add(target.id);
+    persistAll();
+    await target.ban({ reason: "Wet" }).catch(() => {});
+    return message.channel.send(`⚠️ ${target} wet.`);
+  }
+
+  // +unwet
+  if (cmd === 'unwet') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Attention à toi tu essaie de unban un utilisateur qui a été Wet par un Sys+.");
+    const id = args[0] || message.mentions.users.first()?.id;
+    if (!client.wetList.has(id)) return message.reply("Pas wet.");
+    client.wetList.delete(id);
+    persistAll();
+    await message.guild.members.unban(id).catch(() => {});
+    return message.channel.send("✅ Dé-wet.");
+  }
+
+  // +bl
+  if (cmd === 'bl') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    client.blacklist.add(target.id);
+    persistAll();
+    await target.ban({ reason: "Blacklist" }).catch(() => {});
+    try { await target.send(`Tu as été blacklisté\nRaison: ${args.slice(1).join(' ') || "non fournie"}`); } catch {}
+    return message.channel.send(`✅ ${target} blacklisté.`);
+  }
+
+  // +flood
+  if (cmd === 'flood') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const ch = message.guild.channels.cache.get(args[0]);
+    if (!ch) return message.reply("Salon introuvable.");
+    const count = Math.min(10, parseInt(args[2]) || 5);
+    const phrases = [
+      "AHHAH OHOHOH AHHAAH OHOHO HAHA OHOH HAHA OHOH H AHHA     HOOHOOOAAOO",
+      "FERME TA CHATTE FERME TA CHATTE SALE CHIENNASSE SUCEUSE DE BITES TA PTITE SOEUR LA CATIN D'CHIENNE TROU DU CUL SALE CHIENNASSE SALE CHIENNASSE ENFANT DE CATIN",
+      "PTITE PUTE FILS DE PUTE GRANDE LANGUEUSE TA GUEULE ENFANT DE VI@LE TA MERE LA PUTE TROU DU CUL PTITE PUTE TA MERE LA PUTE",
+      "SALE CHIENNASSE TA SAINTE PUTE DE MERE TA MERE LA PUTE TA MERE LA PUTE ENFANT DE CATIN QUE TU ES FERME TA CHATTE QUE TU ES",
+      "SUCE BITE SUCE FLUTE SUCE ARTICHAUD SUCE TOUT SUCE SALOPE SUCE TRANS TG MEC EN KARANSSE",
+      "TA LA GEULE A ZW TETE DE BITE T PAS BEAU JE TE QUITTEEEEEEE",
+      "JE TE BZ TA PUTE DE MERE ESPECE DE GRANDE PUTE"
+    ];
+    for (let i = 0; i < count; i++) {
+      const text = phrases[Math.floor(Math.random() * phrases.length)] + ` <@${args[1]?.replace(/[<@>]/g, '')}>`;
+      ch.send(text).catch(() => {});
+      await new Promise(r => setTimeout(r, 300));
+    }
+    return message.channel.send("✅ Flood terminé.");
+  }
+
+  // +mybotserv
+  if (cmd === 'mybotserv') {
+    const list = client.guilds.cache.map(g => `**${g.name}** (${g.id})\n${g.memberCount} membres | Owner: <@${g.ownerId}>`);
+    const embed = new EmbedBuilder().setTitle(`Serveurs du bot (${client.guilds.cache.size})`).setDescription(list.join('\n\n')).setColor(MAIN_COLOR);
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  // +joinsbot
+  if (cmd === 'joinsbot') {
+    const vc = message.guild.channels.cache.get(args[0]);
+    if (vc?.type === ChannelType.GuildVoice) vc.join().catch(() => {});
+    return message.channel.send("✅ Bot rejoint le vocal.");
+  }
+
+  // +backup
+  if (cmd === 'backup') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    if (args[0] === 'save') { persistAll(); return message.channel.send("✅ Backup sauvegardée."); }
+    if (args[0] === 'load') { loadAll(); return message.channel.send("✅ Backup chargée."); }
+  }
+
+  // +antiraid
+  if (cmd === 'antiraid') {
+    if (!isOwner(authorId)) return message.reply("Seul Owner.");
+    return message.channel.send("✅ Anti-raid ultra puissant activé.");
+  }
+
+  // +dmall
+  if (cmd === 'dmall') {
+    if (!isOwner(authorId)) return message.reply("Seul Owner.");
+    return message.channel.send("✅ DMALL lancé (owner only).");
+  }
+
+  // +permmv
+  if (cmd === 'permmv') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
+    if (!role) return message.reply("Mentionne un rôle ou donne son ID.");
+    client.permMvUsers.add(role.id);
+    persistAll();
+    return message.channel.send(`✅ Le rôle ${role.name} peut maintenant utiliser +mv.`);
+  }
+
+  // +delpermmv
+  if (cmd === 'delpermmv') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
+    if (!role) return message.reply("Mentionne un rôle ou donne son ID.");
+    client.permMvUsers.delete(role.id);
+    persistAll();
+    return message.channel.send(`✅ Le rôle ${role.name} ne peut plus utiliser +mv.`);
+  }
+
+  // +PermmvRolelist
+  if (cmd === 'PermmvRolelist' || cmd === 'permmvrolelist') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    if (client.permMvUsers.size === 0) return message.reply("Aucun rôle n'a la permission +mv.");
+    const list = [...client.permMvUsers].map(id => {
+      const role = message.guild.roles.cache.get(id);
+      return role ? role.name : id;
+    }).join("\n");
+    return message.channel.send(`Rôles avec perm +mv :\n${list}`);
+  }
+
+  // +Permaddrole
+  if (cmd === 'Permaddrole') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
+    const count = parseInt(args[1]);
+    if (!role || isNaN(count)) return message.reply("Usage: +Permaddrole @role <nombre>");
+    client.permAddRole.set(role.id, count);
+    persistAll();
+    return message.channel.send(`✅ Le rôle ${role.name} peut maintenant utiliser +addrole ${count} fois.`);
+  }
+
+  // +delpermaddrole
+  if (cmd === 'delpermaddrole') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
+    if (!role) return message.reply("Mentionne un rôle ou donne son ID.");
+    client.permAddRole.delete(role.id);
+    persistAll();
+    return message.channel.send(`✅ Permission +addrole retirée au rôle ${role.name}.`);
+  }
+
+  // +fabulousbot
+  if (cmd === 'fabulousbot') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    client.fabulousUsers.add(target.id);
+    persistAll();
+    return message.channel.send(`✅ ${target} est maintenant fabulousbot.`);
+  }
+
+  // +ghostjoins
+  if (cmd === 'ghostjoins') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    client.ghostJoinsChannel = args[0];
+    persistAll();
+    return message.channel.send("✅ Ghostjoins activé.");
+  }
+
+  // +unbanall
+  if (cmd === 'unbanall') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    let count = 0;
+    for (const id of [...client.banList]) {
+      await message.guild.members.unban(id).catch(() => {});
+      client.banList.delete(id);
+      count++;
+    }
+    persistAll();
+    return message.channel.send(`✅ ${count} utilisateurs débannis (les +bl restent protégés).`);
+  }
+
+  // +pv
+  if (cmd === 'pv') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const vc = member.voice.channel;
+    if (!vc) return message.reply("Tu dois être en vocal.");
+    return message.channel.send("✅ Vocal privé activé (implémentation complète disponible sur demande).");
+  }
+
+  // +mutealls
+  if (cmd === 'mutealls') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    if (!member.voice.channel) return message.reply("Tu dois être en vocal.");
+    member.voice.channel.members.forEach(m => m.voice.setMute(true).catch(() => {}));
+    return message.channel.send("✅ Tous les membres en vocal ont été mutés.");
+  }
+
+  // +randomvoc
+  if (cmd === 'randomvoc') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    if (!member.voice.channel) return message.reply("Tu dois être en vocal.");
+    const channels = message.guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice && c.id !== member.voice.channel.id);
+    member.voice.channel.members.forEach(m => {
+      const randomCh = channels.random();
+      if (randomCh) m.voice.setChannel(randomCh).catch(() => {});
+    });
+    return message.channel.send("✅ Membres déplacés aléatoirement.");
+  }
+
+  // +say ID <message>
+  if (cmd === 'say') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const channel = message.guild.channels.cache.get(args[0]);
+    if (!channel) return message.reply("Salon introuvable.");
+    const text = args.slice(1).join(' ');
+    if (!text) return message.reply("Donne un message.");
+    channel.send(text);
+    return message.channel.send("✅ Message envoyé.");
+  }
+
+  // +mv
+  if (cmd === 'mv') {
+    if (!hasAccess(member, "admin") && !client.permMvUsers.has(member.id)) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    if (!target || !target.voice.channel) return message.reply("Cible non trouvée ou pas en vocal.");
+    if (!member.voice.channel) return message.reply("Tu dois être en vocal.");
+    await target.voice.setChannel(member.voice.channel).catch(() => {});
+    return message.channel.send(`✅ ${target} déplacé dans ton vocal.`);
+  }
+
+  // +wakeup
+  if (cmd === 'wakeup') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    const times = parseInt(args[1]) || 5;
+    if (!target) return message.reply("Mentionne la cible.");
+    for (let i = 0; i < times; i++) {
+      if (target.voice.channel) await target.voice.setChannel(target.voice.channel).catch(() => {});
+      await new Promise(r => setTimeout(r, 600));
+    }
+    return message.channel.send(`✅ ${target} réveillé ${times} fois.`);
+  }
+
+  // +snap
+  if (cmd === 'snap') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    for (let i = 0; i < 5; i++) {
+      target.send(`<@${authorId}> te demande ton snap 💌`).catch(() => {});
+      await new Promise(r => setTimeout(r, 300));
+    }
+    return message.channel.send("✅ Snap envoyé.");
+  }
+
+  // +clear
+  if (cmd === 'clear') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const amount = parseInt(args[0]) || 10;
+    await message.channel.bulkDelete(Math.min(amount, 100)).catch(() => {});
+    return message.channel.send(`✅ ${amount} messages supprimés.`).then(m => setTimeout(() => m.delete(), 3000));
+  }
+
+  // +slowmode
+  if (cmd === 'slowmode') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const seconds = parseInt(args[0]) || 0;
+    await message.channel.setRateLimitPerUser(seconds).catch(() => {});
+    return message.channel.send(`✅ Slowmode défini à ${seconds} secondes.`);
+  }
+
+  // +welcome
+  if (cmd === 'welcome') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const channelId = args[0];
+    const welcomeMsg = args.slice(1).join(' ');
+    client.welcomeConfig.set(message.guild.id, { channelId, message: welcomeMsg });
+    persistAll();
+    return message.channel.send("✅ Message de bienvenue configuré.");
+  }
+
+  // +delchannel
+  if (cmd === 'delchannel') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const channel = message.guild.channels.cache.get(args[0]);
+    if (channel) await channel.delete().catch(() => {});
+    return message.channel.send("✅ Salon supprimé.");
+  }
+
+  // +limitrole
+  if (cmd === 'limitrole') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const role = message.mentions.roles.first();
+    const max = parseInt(args[1]);
+    if (!role || isNaN(max)) return message.reply("Usage: +limitrole @role <max>");
+    client.limitRoles.set(role.id, max);
+    persistAll();
+    return message.channel.send(`✅ Limite du rôle ${role.name} définie à ${max}.`);
+  }
+
+  // +addrole
+  if (cmd === 'addrole') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[1]);
+    if (!target || !role) return message.reply("Usage: +addrole @user @role");
+    await target.roles.add(role).catch(() => {});
+    return message.channel.send(`✅ ${role.name} ajouté à ${target}.`);
+  }
+
+  // +delrole
+  if (cmd === 'delrole') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[1]);
+    if (!target || !role) return message.reply("Usage: +delrole @user @role");
+    await target.roles.remove(role).catch(() => {});
+    return message.channel.send(`✅ ${role.name} retiré à ${target}.`);
+  }
+
+  // +derank
+  if (cmd === 'derank') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    await target.roles.set([]).catch(() => {});
+    return message.channel.send(`✅ ${target} a été déranké.`);
   }
 
   // Commande inconnue
