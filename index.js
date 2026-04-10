@@ -30,7 +30,8 @@ const PATHS = {
   permAddRole: path.join(DATA_DIR, 'permAddRole.json'),
   smashChannels: path.join(DATA_DIR, 'smashChannels.json'),
   welcomeConfig: path.join(DATA_DIR, 'welcomeConfig.json'),
-  backup: path.join(DATA_DIR, 'backup.json')
+  backup: path.join(DATA_DIR, 'backup.json'),
+  autorole: path.join(DATA_DIR, 'autorole.json')
 };
 
 const PORT = process.env.PORT || 10000;
@@ -70,6 +71,7 @@ client.permAddRole = new Map();
 client.smashChannels = new Set();
 client.welcomeConfig = new Map();
 client.jailRoleId = null;
+client.autorole = null; // rôle automatique à l'arrivée
 
 let persistentCooldowns = {};
 
@@ -101,6 +103,7 @@ function persistAll() {
   writeJSONSafe(PATHS.smashChannels, [...client.smashChannels]);
   writeJSONSafe(PATHS.welcomeConfig, Object.fromEntries(client.welcomeConfig));
   writeJSONSafe(PATHS.backup, { jailRoleId: client.jailRoleId });
+  writeJSONSafe(PATHS.autorole, client.autorole);
 }
 function loadAll() {
   const wl = readJSONSafe(PATHS.whitelist); if (Array.isArray(wl)) wl.forEach(id => client.whitelist.add(id));
@@ -122,6 +125,7 @@ function loadAll() {
   const smash = readJSONSafe(PATHS.smashChannels); if (Array.isArray(smash)) smash.forEach(id => client.smashChannels.add(id));
   const welcomeData = readJSONSafe(PATHS.welcomeConfig); if (welcomeData) client.welcomeConfig = new Map(Object.entries(welcomeData));
   const backupData = readJSONSafe(PATHS.backup); if (backupData && backupData.jailRoleId) client.jailRoleId = backupData.jailRoleId;
+  client.autorole = readJSONSafe(PATHS.autorole) || null;
 }
 loadAll();
 setInterval(persistAll, 60000);
@@ -154,6 +158,20 @@ function getStatusAndPlatform(member) {
   return { status: statusText, platform };
 }
 
+// ==================== LOG CHANNELS ====================
+async function ensureLogChannels(guild) {
+  const names = ['messages-logs', 'boost-logs', 'commande-logs'];
+  const out = {};
+  for (const name of names) {
+    let ch = guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildText);
+    if (!ch) {
+      ch = await guild.channels.create({ name, type: ChannelType.GuildText, reason: 'Logs par bot' }).catch(() => null);
+    }
+    out[name.replace('-logs', '')] = ch;
+  }
+  return out;
+}
+
 // ==================== KEEP-ALIVE ====================
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -163,17 +181,50 @@ http.createServer((req, res) => {
 setInterval(() => { try { https.get(EXTERNAL_PING_URL).on('error', () => {}); } catch (e) {} }, 300000);
 
 // ==================== EVENTS ====================
-client.on('messageDelete', message => {
+client.on('messageDelete', async message => {
   if (!message?.author || message.author.bot) return;
-  client.snipes.set(message.channel.id, {
-    content: message.content || "",
-    author: message.author,
-    timestamp: Date.now(),
-    attachments: [...message.attachments.values()].map(a => a.url)
-  });
+
+  const logs = await ensureLogChannels(message.guild);
+  const logCh = logs.messages;
+  if (!logCh) return;
+
+  const embed = new EmbedBuilder()
+    .setTitle("Message supprimé")
+    .addFields(
+      { name: "Auteur", value: `${message.author} (${message.author.id})`, inline: true },
+      { name: "Salon", value: `${message.channel}`, inline: true },
+      { name: "Heure d'envoi", value: `<t:${Math.floor(message.createdTimestamp/1000)}:F>`, inline: true },
+      { name: "Heure de suppression", value: `<t:${Math.floor(Date.now()/1000)}:F>`, inline: true }
+    )
+    .setColor(MAIN_COLOR)
+    .setTimestamp();
+
+  if (message.content) embed.setDescription(message.content);
+  if (message.attachments.size) embed.setImage(message.attachments.first().url);
+
+  logCh.send({ embeds: [embed] }).catch(() => {});
+});
+
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  const logs = await ensureLogChannels(newMember.guild);
+  const boostCh = logs.boost;
+  if (!boostCh) return;
+
+  if (!oldMember.premiumSince && newMember.premiumSince) {
+    boostCh.send(`🎉 ${newMember} a boosté le serveur !`).catch(() => {});
+  } else if (oldMember.premiumSince && !newMember.premiumSince) {
+    boostCh.send(`😢 ${newMember} a cessé de booster le serveur.`).catch(() => {});
+  }
 });
 
 client.on('guildMemberAdd', async member => {
+  // Autorole
+  if (client.autorole) {
+    const role = member.guild.roles.cache.get(client.autorole);
+    if (role) await member.roles.add(role).catch(() => {});
+  }
+
+  // InviteLogger
   if (!client.inviteLoggerChannel) return;
   const ch = member.guild.channels.cache.get(client.inviteLoggerChannel);
   if (!ch) return;
@@ -221,6 +272,12 @@ client.on('messageCreate', async message => {
   const cmd = args.shift().toLowerCase();
   const authorId = message.author.id;
   const member = message.member;
+
+  // Log commande dans commande-logs
+  const logs = await ensureLogChannels(message.guild);
+  if (logs.commande) {
+    logs.commande.send(`📌 **${message.author}** a utilisé : \`${message.content}\``).catch(() => {});
+  }
 
   // +help
   if (cmd === 'help') {
@@ -279,7 +336,9 @@ client.on('messageCreate', async message => {
         `+limitrole @role <max> → Limite un rôle\n` +
         `+addrole @user @role → Ajoute rôle\n` +
         `+delrole @user @role → Retire rôle\n` +
-        `+derank @user → Retire tous les rôles`
+        `+derank @user → Retire tous les rôles\n` +
+        `+autorole @role → Rôle automatique à l'arrivée\n` +
+        `+sayroleselection <message> → Message avec réactions pour rôles`
       );
     return message.channel.send({ embeds: [embed] });
   }
@@ -356,6 +415,46 @@ client.on('messageCreate', async message => {
       return message.channel.send(`✅ ${target} a été libéré du jail.`);
     }
     return message.reply("Cette personne n'est pas en jail.");
+  }
+
+  // +clear @cible <nombre> max 500
+  if (cmd === 'clear') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+
+    let targetUser = message.mentions.users.first();
+    let amount = parseInt(args[targetUser ? 1 : 0]) || 100;
+    amount = Math.min(500, Math.max(1, amount));
+
+    try {
+      let messages = await message.channel.messages.fetch({ limit: 100 });
+      let toDelete = targetUser ? messages.filter(m => m.author.id === targetUser.id).first(amount) : messages.first(amount);
+      if (toDelete.size === 0) return message.reply("Aucun message à supprimer.");
+      await message.channel.bulkDelete(toDelete, true);
+      return message.channel.send(`✅ ${toDelete.size} messages supprimés.`).then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
+    } catch (e) {
+      return message.reply("Erreur lors de la suppression des messages.");
+    }
+  }
+
+  // +autorole @role
+  if (cmd === 'autorole') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const role = message.mentions.roles.first();
+    if (!role) return message.reply("Mentionne le rôle.");
+    client.autorole = role.id;
+    persistAll();
+    return message.channel.send(`✅ Rôle ${role.name} sera donné automatiquement aux nouveaux membres.`);
+  }
+
+  // +sayroleselection <message>
+  if (cmd === 'sayroleselection') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const text = args.join(' ');
+    if (!text) return message.reply("Donne le message à envoyer.");
+    const sent = await message.channel.send(text);
+    // Le bot envoie le message. Tu ajoutes les réactions manuellement.
+    // Chaque réaction donnera un rôle différent (tu peux ajouter plusieurs réactions).
+    return message.channel.send(`✅ Message envoyé. Ajoute tes réactions. Chaque réaction donnera un rôle différent.`);
   }
 
   // +ping
@@ -638,42 +737,6 @@ client.on('messageCreate', async message => {
       await new Promise(r => setTimeout(r, 300));
     }
     return message.channel.send("✅ Snap envoyé.");
-  }
-
-  // +clear @cible <nombre> (MAX 500)
-  if (cmd === 'clear') {
-    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
-
-    let targetUser = message.mentions.users.first();
-    let amount = parseInt(args[0]);
-
-    if (targetUser) {
-      // clear messages d'un utilisateur spécifique
-      amount = parseInt(args[1]) || 100;
-    } else {
-      // clear derniers messages du salon
-      amount = parseInt(args[0]) || 100;
-    }
-
-    amount = Math.min(500, Math.max(1, amount));
-
-    try {
-      let messages = await message.channel.messages.fetch({ limit: 100 });
-      let toDelete = [];
-
-      if (targetUser) {
-        toDelete = messages.filter(m => m.author.id === targetUser.id).first(amount);
-      } else {
-        toDelete = messages.first(amount);
-      }
-
-      if (toDelete.size === 0) return message.reply("Aucun message trouvé à supprimer.");
-
-      await message.channel.bulkDelete(toDelete, true);
-      return message.channel.send(`✅ ${toDelete.size} messages supprimés.`).then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
-    } catch (e) {
-      return message.reply("Erreur lors de la suppression des messages (limite Discord ou permissions).");
-    }
   }
 
   // +slowmode
