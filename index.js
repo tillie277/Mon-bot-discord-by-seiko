@@ -27,6 +27,7 @@ const PATHS = {
   ghostJoins: path.join(DATA_DIR, 'ghostJoins.json'),
   fabulousUsers: path.join(DATA_DIR, 'fabulousUsers.json'),
   permAddRole: path.join(DATA_DIR, 'permAddRole.json'),
+  permImageRoles: path.join(DATA_DIR, 'permImageRoles.json'),
   smashChannels: path.join(DATA_DIR, 'smashChannels.json'),
   welcomeConfig: path.join(DATA_DIR, 'welcomeConfig.json'),
   backup: path.join(DATA_DIR, 'backup.json'),
@@ -65,6 +66,7 @@ client.inviteLoggerChannel = null;
 client.ghostJoinsChannel = null;
 client.fabulousUsers = new Set();
 client.permAddRole = new Map();
+client.permImageRoles = new Set();
 client.smashChannels = new Set();
 client.welcomeConfig = new Map();
 client.jailRoleId = null;
@@ -101,6 +103,7 @@ function persistAll() {
   writeJSONSafe(PATHS.ghostJoins, client.ghostJoinsChannel);
   writeJSONSafe(PATHS.fabulousUsers, [...client.fabulousUsers]);
   writeJSONSafe(PATHS.permAddRole, [...client.permAddRole.entries()]);
+  writeJSONSafe(PATHS.permImageRoles, [...client.permImageRoles]);
   writeJSONSafe(PATHS.smashChannels, [...client.smashChannels]);
   writeJSONSafe(PATHS.welcomeConfig, Object.fromEntries(client.welcomeConfig));
   writeJSONSafe(PATHS.backup, { jailRoleId: client.jailRoleId, antiRaid: client.antiRaid });
@@ -124,6 +127,7 @@ function loadAll() {
   client.ghostJoinsChannel = readJSONSafe(PATHS.ghostJoins);
   const fab = readJSONSafe(PATHS.fabulousUsers); if (Array.isArray(fab)) fab.forEach(id => client.fabulousUsers.add(id));
   const permAdd = readJSONSafe(PATHS.permAddRole); if (Array.isArray(permAdd)) permAdd.forEach(([k, v]) => client.permAddRole.set(k, v));
+  const permImg = readJSONSafe(PATHS.permImageRoles); if (Array.isArray(permImg)) permImg.forEach(id => client.permImageRoles.add(id));
   const smash = readJSONSafe(PATHS.smashChannels); if (Array.isArray(smash)) smash.forEach(id => client.smashChannels.add(id));
   const welcomeData = readJSONSafe(PATHS.welcomeConfig); if (welcomeData) client.welcomeConfig = new Map(Object.entries(welcomeData));
   const backupData = readJSONSafe(PATHS.backup); 
@@ -150,6 +154,11 @@ function hasAccess(member, level) {
   return false;
 }
 
+function hasPermImage(member) {
+  if (!member) return false;
+  return [...member.roles.cache.keys()].some(roleId => client.permImageRoles.has(roleId));
+}
+
 function getStatusAndPlatform(member) {
   if (!member.presence) return { status: "⚫ Hors ligne", platform: "Inconnu" };
   const statusMap = { online: "🟢 En ligne", idle: "🟡 Inactif", dnd: "🔴 Ne pas déranger", offline: "⚫ Hors ligne" };
@@ -163,6 +172,15 @@ function getStatusAndPlatform(member) {
   return { status: statusText, platform };
 }
 
+function getRandomVoiceChannel(guild, excludeId = null) {
+  const voices = guild.channels.cache.filter(c => 
+    c.type === ChannelType.GuildVoice && 
+    c.id !== excludeId && 
+    c.viewable
+  );
+  return voices.size > 0 ? voices.random() : null;
+}
+
 async function ensureLogChannels(guild) {
   const names = ['messages-logs', 'boost-logs', 'commande-logs'];
   const out = {};
@@ -174,7 +192,7 @@ async function ensureLogChannels(guild) {
   return out;
 }
 
-// ==================== ÉVÉNEMENTS AMÉLIORÉS ====================
+// ==================== ÉVÉNEMENTS ====================
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
   const member = newState.member;
@@ -193,7 +211,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 client.on('messageDelete', async message => {
   if (!message?.author || message.author.bot) return;
 
-  // Snipe amélioré
   if (message.content || message.attachments.size > 0) {
     client.snipes.set(message.channel.id, {
       content: message.content || null,
@@ -229,14 +246,15 @@ client.on('guildMemberAdd', async member => {
     if (role) await member.roles.add(role).catch(() => {});
   }
 
+  // Anti-raid puissant
   if (client.antiRaid && !isWL(member.id) && !isOwner(member.id)) {
-    member.kick("Anti-raid activé").catch(() => {});
+    member.kick("Anti-raid puissant activé par Seiko Bot").catch(() => {});
     return;
   }
 
   if (client.inviteLoggerChannel) {
     const logCh = member.guild.channels.cache.get(client.inviteLoggerChannel);
-    if (logCh) logCh.send(`📥 **${member}** a rejoint.`).catch(() => {});
+    if (logCh) logCh.send(`📥 **${member}** a rejoint le serveur.`).catch(() => {});
   }
 });
 
@@ -258,7 +276,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   const logs = await ensureLogChannels(newMember.guild);
   const boostCh = logs.boost;
   if (boostCh) {
-    if (!oldMember.premiumSince && newMember.premiumSince) boostCh.send(`🎉 ${newMember} a boosté !`).catch(() => {});
+    if (!oldMember.premiumSince && newMember.premiumSince) boostCh.send(`🎉 ${newMember} a boosté le serveur !`).catch(() => {});
     else if (oldMember.premiumSince && !newMember.premiumSince) boostCh.send(`😢 ${newMember} a cessé de booster.`).catch(() => {});
   }
 
@@ -268,10 +286,38 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   }
 });
 
+// Keep-alive
 http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Bot is alive - Seiko Edition'); }).listen(PORT, '0.0.0.0', () => console.log(`✅ Keep-alive on port ${PORT}`));
 setInterval(() => { try { https.get(EXTERNAL_PING_URL).on('error', () => {}); } catch (e) {} }, 300000);
 
+// ==================== MESSAGE CREATE (TOUT DÉPLIÉ + NOUVELLES FONCTIONNALITÉS) ====================
 client.on('messageCreate', async message => {
+  // === RESTRICTION LIENS GIF SEULEMENT ===
+  if (!message.author.bot) {
+    const hasImagePerm = hasPermImage(message.member);
+    const urlRegex = /https?:\/\/[^\s]+/gi;
+    const urls = message.content.match(urlRegex) || [];
+    
+    let hasNonGifLink = false;
+    for (const url of urls) {
+      if (!url.toLowerCase().endsWith('.gif')) {
+        hasNonGifLink = true;
+        break;
+      }
+    }
+
+    // Vérification attachments GIF
+    const hasGifAttachment = message.attachments.some(att => 
+      att.contentType?.includes('image/gif') || att.url.toLowerCase().endsWith('.gif')
+    );
+
+    if (hasNonGifLink && !hasGifAttachment && !hasImagePerm) {
+      await message.delete().catch(() => {});
+      return message.channel.send(`❌ <@${message.author.id}> seuls les liens **GIF** sont autorisés (ou rôle perm image).`).then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
+    }
+  }
+
+  // Mode smash
   if (client.smashChannels.has(message.channel.id) && !message.author.bot) {
     const hasMedia = message.attachments.some(a => a.contentType?.startsWith('image') || a.contentType?.startsWith('video'));
     if (!hasMedia) return message.delete().catch(() => {});
@@ -280,13 +326,13 @@ client.on('messageCreate', async message => {
     message.startThread({ name: "Avis smash/pass", autoArchiveDuration: 1440 }).catch(() => {});
   }
 
-  if (!message.content.startsWith('+') || message.author.bot) {
-    if (message.mentions.has(client.user)) {
-      if (message.author.id === OWNER_ID) return message.reply("salut boss 🔥");
-      else return message.reply("ftg sale grosse keh reste a ta place d’excrément.");
-    }
-    return;
+  // Mention du bot
+  if (message.mentions.has(client.user) && !message.author.bot) {
+    if (message.author.id === OWNER_ID) return message.reply("salut boss je suis la prêt à tout 🔥");
+    else return message.reply("ftg sale grosse keh reste a ta place d’excrément.");
   }
+
+  if (!message.content.startsWith('+') || message.author.bot) return;
 
   const args = message.content.slice(1).trim().split(/ +/);
   const cmd = args.shift().toLowerCase();
@@ -296,7 +342,7 @@ client.on('messageCreate', async message => {
   const logs = await ensureLogChannels(message.guild);
   if (logs.commande) logs.commande.send(`📌 **${message.author.tag}** a utilisé : \`${message.content}\``).catch(() => {});
 
-  // ==================== TOUTES LES COMMANDES (100% FONCTIONNELLES) ====================
+  // ==================== TOUTES LES COMMANDES DÉPLIÉES ====================
 
   if (cmd === 'help') {
     const embed = new EmbedBuilder().setTitle("📜 Commandes Seiko Bot").setColor(MAIN_COLOR).setDescription(
@@ -315,8 +361,9 @@ client.on('messageCreate', async message => {
       `+rolemembers @role → Liste membres du rôle\n` +
       `+jail @user → Jail\n` +
       `+unjail @user → Libère jail\n` +
-      `+antiraid → Active/désactive anti-raid\n` +
-      `+limitrole @role <max> → Limite rôle\n\n` +
+      `+antiraid → Anti-raid puissant\n` +
+      `+limitrole @role <max> → Limite rôle\n` +
+      `+permimage @role → Autorise liens normaux\n\n` +
       `**Fun / Utilitaires**\n` +
       `+dog @user → Dog + follow vocal\n` +
       `+undog @user / +undogall → Libère\n` +
@@ -325,7 +372,7 @@ client.on('messageCreate', async message => {
       `+bl @user / +unbl @user → Blacklist\n` +
       `+smash → Mode smash (images/vidéos only)\n` +
       `+fabulousbot @user → Fabulousbot\n` +
-      `+wakeup @user <times> → Réveille\n` +
+      `+wakeup @user <times> → Réveille (déplace vocal + MP)\n` +
       `+snap @user → Demande snap\n` +
       `+flood ID @user <10> → Spam\n` +
       `+say ID <message> → Envoie dans salon\n` +
@@ -349,6 +396,15 @@ client.on('messageCreate', async message => {
       `+ping → Test\n`
     );
     return message.channel.send({ embeds: [embed] });
+  }
+
+  if (cmd === 'permimage') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
+    const role = message.mentions.roles.first();
+    if (!role) return message.reply("❌ Mentionne le rôle.");
+    client.permImageRoles.add(role.id);
+    persistAll();
+    return message.channel.send(`✅ Rôle **${role.name}** peut maintenant envoyer tous les liens (pas seulement GIF).`);
   }
 
   if (cmd === 'pic') {
@@ -486,7 +542,7 @@ client.on('messageCreate', async message => {
     if (!role) return message.reply("❌ Usage : +Permaddrole @role <count>");
     client.permAddRole.set(role.id, count);
     persistAll();
-    return message.channel.send(`✅ Le rôle **${role.name}** peut maintenant utiliser +addrole / +delrole (limite ${count}).`);
+    return message.channel.send(`✅ Le rôle **${role.name}** peut maintenant utiliser +addrole / +delrole.`);
   }
 
   if (cmd === 'delpermaddrole') {
@@ -637,7 +693,7 @@ client.on('messageCreate', async message => {
     return message.channel.send(`✅ Dmall terminé : ${sent}/${members.length} messages envoyés.`);
   }
 
-  if (cmd === 'ping') return message.channel.send("✅ Je suis là boss, prêt à tout.");
+  if (cmd === 'ping') return message.channel.send("ta cru jt off btrd?");
 
   if (cmd === 'jail') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
@@ -712,6 +768,8 @@ client.on('messageCreate', async message => {
     const target = message.mentions.members.first() || message.member;
     const user = target.user;
     const { status, platform } = getStatusAndPlatform(target);
+    const createdDays = Math.floor((Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24));
+    const joinedDays = target.joinedAt ? Math.floor((Date.now() - target.joinedAt) / (1000 * 60 * 60 * 24)) : 0;
     const embed = new EmbedBuilder()
       .setTitle(user.tag)
       .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 128 }))
@@ -721,8 +779,8 @@ client.on('messageCreate', async message => {
         { name: "Statut", value: status, inline: true },
         { name: "Plateforme", value: platform, inline: true },
         { name: "Vocal", value: target.voice?.channel ? "✅ Oui" : "❌ Non", inline: true },
-        { name: "Créé le", value: `<t:${Math.floor(user.createdTimestamp/1000)}:F>`, inline: true },
-        { name: "Rejoint le", value: target.joinedAt ? `<t:${Math.floor(target.joinedAt/1000)}:F>` : "Inconnu", inline: true },
+        { name: "Compte créé", value: `<t:${Math.floor(user.createdTimestamp/1000)}:F> (**${createdDays} jours**)` , inline: true },
+        { name: "Rejoint le", value: target.joinedAt ? `<t:${Math.floor(target.joinedAt/1000)}:F> (**${joinedDays} jours**)` : "Inconnu", inline: true },
         { name: "Rôles", value: target.roles.cache.filter(r => r.id !== target.guild.id).map(r => r.toString()).join(" ") || "Aucun", inline: false }
       );
     return message.channel.send({ embeds: [embed] });
@@ -758,7 +816,7 @@ client.on('messageCreate', async message => {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
     client.antiRaid = !client.antiRaid;
     persistAll();
-    return message.channel.send(`🚨 Anti-raid **${client.antiRaid ? 'activé' : 'désactivé'}**.`);
+    return message.channel.send(`🚨 Anti-raid **${client.antiRaid ? 'activé (puissant)' : 'désactivé'}** : nouveaux membres non WL/Owner sont kickés instantanément.`);
   }
 
   if (cmd === 'unbanall') {
@@ -802,14 +860,20 @@ client.on('messageCreate', async message => {
 
   if (cmd === 'wakeup') {
     if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const target = message.mentions.members.first();
-    const times = Math.min(10, parseInt(args[1]) || 5);
-    if (!target) return message.reply("❌ Mentionne la cible.");
+    const target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
+    const times = Math.min(15, parseInt(args[1]) || 5);
+    if (!target) return message.reply("❌ Mentionne la cible ou donne son ID.");
+    const executorName = message.member.displayName;
+
     for (let i = 0; i < times; i++) {
-      target.send(`<@${authorId}> te réveille 🛎️`).catch(() => {});
-      await new Promise(r => setTimeout(r, 600));
+      const randomVC = getRandomVoiceChannel(message.guild);
+      if (target.voice.channel && randomVC) {
+        await target.voice.setChannel(randomVC).catch(() => {});
+      }
+      target.send(`${executorName} te demande de te réveiller 🛎️`).catch(() => {});
+      await new Promise(r => setTimeout(r, 800));
     }
-    return message.channel.send("✅ Réveil envoyé.");
+    return message.channel.send(`✅ ${target} réveillé ${times} fois (déplacements + MP).`);
   }
 
   if (cmd === 'slowmode') {
