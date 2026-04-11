@@ -236,7 +236,7 @@ client.on('messageCreate', async message => {
   const logs = await ensureLogChannels(message.guild);
   if (logs.commande) logs.commande.send(`📌 **${message.author}** a utilisé : \`${message.content}\``).catch(() => {});
 
-  // ==================== TOUTES LES COMMANDES DÉPLIÉES ICI ====================
+  // ==================== TOUTES LES COMMANDES DÉPLIÉES ====================
 
   if (cmd === 'help') {
     const embed = new EmbedBuilder().setTitle("Commandes disponibles").setColor(MAIN_COLOR).setDescription(
@@ -297,6 +297,44 @@ client.on('messageCreate', async message => {
     client.inviteLoggerChannel = message.channel.id;
     persistAll();
     return message.channel.send("✅ Invite Logger activé dans ce salon.");
+  }
+
+  if (cmd === 'fabulousbot') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    client.fabulousUsers.add(target.id);
+    persistAll();
+    return message.channel.send(`✅ ${target} est maintenant fabulousbot.`);
+  }
+
+  if (cmd === 'permmv') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
+    if (!role) return message.reply("Mentionne un rôle ou donne son ID.");
+    client.permMvUsers.add(role.id);
+    persistAll();
+    return message.channel.send(`✅ Le rôle ${role.name} peut maintenant utiliser +mv.`);
+  }
+
+  if (cmd === 'delrole') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[1]);
+    if (!target || !role) return message.reply("Usage: +delrole @user @role");
+    await target.roles.remove(role).catch(() => {});
+    return message.channel.send(`✅ ${role.name} retiré à ${target}.`);
+  }
+
+  if (cmd === 'snap') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    for (let i = 0; i < 5; i++) {
+      target.send(`<@${authorId}> te demande ton snap 💌`).catch(() => {});
+      await new Promise(r => setTimeout(r, 300));
+    }
+    return message.channel.send("✅ Snap envoyé.");
   }
 
   if (cmd === 'dmall') {
@@ -495,8 +533,6 @@ client.on('messageCreate', async message => {
     await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }).catch(() => {});
     return message.channel.send("🔓 Salon déverrouillé.");
   }
-
-  if (cmd === 'ping') return message.channel.send("ta cru j’étais off btrd?");
 
   message.reply("Commande inconnue. Tape `+help` pour la liste complète.");
 });
