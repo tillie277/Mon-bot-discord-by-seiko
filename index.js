@@ -160,12 +160,11 @@ async function ensureLogChannels(guild) {
   return out;
 }
 
-// ==================== +DOG – PSEUDO LOCK + FOLLOW VOCAL INSTANTANÉ ====================
+// +DOG : pseudo lock + follow vocal instantané (la personne te suit partout où tu vas)
 client.on('voiceStateUpdate', async (oldState, newState) => {
   const member = newState.member;
   if (!member || member.user.bot) return;
 
-  // Si l'executor change de vocal, on fait suivre tous ses dogs
   client.dogs.forEach((info, dogId) => {
     if (info.executorId === member.id && newState.channel) {
       const dog = newState.guild.members.cache.get(dogId);
@@ -368,6 +367,24 @@ client.on('messageCreate', async message => {
     client.whitelist.add(id);
     persistAll();
     return message.channel.send(`✅ ${target} ajouté à la whitelist.`);
+  }
+
+  if (cmd === 'bl') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const target = message.mentions.users.first() || args[0];
+    if (!target) return message.reply("Mentionne ou donne l'ID.");
+    const id = target.id || target;
+    client.blacklist.add(id);
+    persistAll();
+    return message.channel.send(`✅ ${target} ajouté à la blacklist.`);
+  }
+
+  if (cmd === 'derank') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("Mentionne la cible.");
+    await target.roles.set([]).catch(() => {});
+    return message.channel.send(`✅ ${target} a été déranké.`);
   }
 
   if (cmd === 'dmall') {
