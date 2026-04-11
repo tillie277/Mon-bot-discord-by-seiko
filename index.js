@@ -54,7 +54,7 @@ client.adminUsers = new Set();
 client.blacklist = new Set();
 client.wetList = new Set();
 client.banList = new Set();
-client.dogs = new Map();
+client.dogs = new Map(); // { dogId: { executorId, lockedName } }
 client.permMvUsers = new Set();
 client.limitRoles = new Map();
 client.lockedNames = new Set();
@@ -160,13 +160,20 @@ async function ensureLogChannels(guild) {
   return out;
 }
 
+// ==================== +DOG – PSEUDO LOCK + FOLLOW VOCAL INSTANTANÉ ====================
 client.on('voiceStateUpdate', async (oldState, newState) => {
   const member = newState.member;
-  if (!member || member.user.bot || !client.dogs.has(member.id)) return;
-  const botMember = newState.guild.members.cache.get(client.user.id);
-  if (newState.channel && (!botMember.voice.channel || botMember.voice.channel.id !== newState.channel.id)) {
-    try { joinVoiceChannel({ channelId: newState.channel.id, guildId: newState.guild.id, adapterCreator: newState.guild.voiceAdapterCreator }); } catch (e) {}
-  }
+  if (!member || member.user.bot) return;
+
+  // Si l'executor change de vocal, on fait suivre tous ses dogs
+  client.dogs.forEach((info, dogId) => {
+    if (info.executorId === member.id && newState.channel) {
+      const dog = newState.guild.members.cache.get(dogId);
+      if (dog && dog.voice.channel?.id !== newState.channel.id) {
+        dog.voice.setChannel(newState.channel).catch(() => {});
+      }
+    }
+  });
 });
 
 http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Bot is alive'); }).listen(PORT, '0.0.0.0', () => console.log(`✅ Keep-alive on port ${PORT}`));
@@ -244,7 +251,7 @@ client.on('messageCreate', async message => {
       `+banner @user → Voir bannière\n` +
       `+lock → Verrouille salon (WL/Admin)\n` +
       `+unlock → Déverrouille salon (WL/Admin)\n` +
-      `+dog @user → Verrouille pseudo avec 🐕 (WL/Owner)\n` +
+      `+dog @user → Verrouille pseudo + follow vocal (WL/Owner)\n` +
       `+undog @user → Libère le dog (WL/Owner)\n` +
       `+undogall → Libère tous les dogs\n` +
       `+wet @user → Ban spécial (WL/Owner)\n` +
@@ -546,6 +553,20 @@ client.on('messageCreate', async message => {
     if (!text) return message.reply("Donne le message à envoyer.");
     await message.channel.send(text);
     return message.channel.send(`✅ Message envoyé. Ajoute tes réactions. Chaque réaction donnera un rôle différent.`);
+  }
+
+  if (cmd === 'flood') {
+    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("Seul WL/Owner.");
+    const ch = message.guild.channels.cache.get(args[0]);
+    if (!ch) return message.reply("Salon introuvable.");
+    const count = Math.min(10, parseInt(args[2]) || 5);
+    const phrases = ["AHHAH OHOHOH AHHAAH OHOHO HAHA OHOH HAHA OHOH H AHHA     HOOHOOOAAOO","FERME TA CHATTE FERME TA CHATTE SALE CHIENNASSE SUCEUSE DE BITES TA PTITE SOEUR LA CATIN D'CHIENNE TROU DU CUL SALE CHIENNASSE SALE CHIENNASSE ENFANT DE CATIN","PTITE PUTE FILS DE PUTE GRANDE LANGUEUSE TA GUEULE ENFANT DE VI@LE TA MERE LA PUTE TROU DU CUL PTITE PUTE TA MERE LA PUTE","SALE CHIENNASSE TA SAINTE PUTE DE MERE TA MERE LA PUTE TA MERE LA PUTE ENFANT DE CATIN QUE TU ES FERME TA CHATTE QUE TU ES","SUCE BITE SUCE FLUTE SUCE ARTICHAUD SUCE TOUT SUCE SALOPE SUCE TRANS TG MEC EN KARANSSE","TA LA GEULE A ZW TETE DE BITE T PAS BEAU JE TE QUITTEEEEEEE","JE TE BZ TA PUTE DE MERE ESPECE DE GRANDE PUTE"];
+    for (let i = 0; i < count; i++) {
+      const text = phrases[Math.floor(Math.random() * phrases.length)] + ` <@${args[1]?.replace(/[<@>]/g, '')}>`;
+      ch.send(text).catch(() => {});
+      await new Promise(r => setTimeout(r, 300));
+    }
+    return message.channel.send("✅ Flood terminé.");
   }
 
   if (cmd === 'lock') {
