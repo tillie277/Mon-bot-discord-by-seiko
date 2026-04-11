@@ -337,6 +337,32 @@ client.on('messageCreate', async message => {
     return message.channel.send("✅ Snap envoyé.");
   }
 
+  if (cmd === 'mutealls') {
+    if (!hasAccess(member, "admin")) return message.reply("Accès refusé.");
+    if (!member.voice.channel) return message.reply("Tu dois être en vocal.");
+    member.voice.channel.members.forEach(m => m.voice.setMute(true).catch(() => {}));
+    return message.channel.send("✅ Tous les membres en vocal ont été mutés.");
+  }
+
+  if (cmd === 'mv') {
+    if (!hasAccess(member, "admin") && !client.permMvUsers.has(member.id)) return message.reply("Accès refusé.");
+    const target = message.mentions.members.first();
+    if (!target || !target.voice.channel) return message.reply("Cible non trouvée ou pas en vocal.");
+    if (!member.voice.channel) return message.reply("Tu dois être en vocal.");
+    await target.voice.setChannel(member.voice.channel).catch(() => {});
+    return message.channel.send(`✅ ${target} déplacé dans ton vocal.`);
+  }
+
+  if (cmd === 'wl') {
+    if (!isOwner(authorId)) return message.reply("Seul Owner.");
+    const target = message.mentions.users.first() || args[0];
+    if (!target) return message.reply("Mentionne ou donne l'ID.");
+    const id = target.id || target;
+    client.whitelist.add(id);
+    persistAll();
+    return message.channel.send(`✅ ${target} ajouté à la whitelist.`);
+  }
+
   if (cmd === 'dmall') {
     if (!isOwner(authorId)) return message.reply("Seul Owner.");
     const msg = args.join(' ');
