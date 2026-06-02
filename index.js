@@ -7,7 +7,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ChannelTyp
 
 // ====================== CONFIG ======================
 const MAIN_COLOR = "#8A2BE2";
-const OWNER_ID = "685679698054742017";
+const OWNER_ID = "685679698054742017 1505957196901650647";
 const DATA_DIR = path.resolve(__dirname, 'data');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
