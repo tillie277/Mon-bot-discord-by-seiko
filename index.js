@@ -37,6 +37,7 @@ const PATHS = {
   // NOUVEAUX PATHS
   roleLocks: path.join(DATA_DIR, 'roleLocks.json'),
   ultraLock: path.join(DATA_DIR, 'ultraLock.json'),
+  ownerBots: path.join(DATA_DIR, 'ownerBots.json'),
 };
 
 const PORT = process.env.PORT || 10000;
@@ -85,6 +86,8 @@ client.antiRaid = false;
 client.roleLocks = new Map();
 // ultraLock : { active: bool, channelId: string|null, lockerUserId: string|null }
 client.ultraLock = { active: false, channelId: null, lockerUserId: null };
+// ownerBots : Set<userId> — même niveau que l'owner bot, sans restriction
+client.ownerBots = new Set();
 
 let persistentCooldowns = {};
 
@@ -131,6 +134,7 @@ function persistAll() {
   // NOUVEAUX
   writeJSONSafe(PATHS.roleLocks, [...client.roleLocks.entries()]);
   writeJSONSafe(PATHS.ultraLock, client.ultraLock);
+  writeJSONSafe(PATHS.ownerBots, [...client.ownerBots]);
 }
 
 function loadAll() {
@@ -163,19 +167,21 @@ function loadAll() {
   // NOUVEAUX
   const rl = readJSONSafe(PATHS.roleLocks); if (Array.isArray(rl)) rl.forEach(([k, v]) => client.roleLocks.set(k, v));
   const ul = readJSONSafe(PATHS.ultraLock); if (ul) client.ultraLock = ul;
+  const ob = readJSONSafe(PATHS.ownerBots); if (Array.isArray(ob)) ob.forEach(id => client.ownerBots.add(id));
 }
 
 // ====================== PERMISSIONS ======================
 const isOwner = (id) => id === OWNER_ID;
-const isWL = (id) => client.whitelist.has(id) || isOwner(id);
+const isOwnerBot = (id) => client.ownerBots.has(id) || isOwner(id);
+const isWL = (id) => client.whitelist.has(id) || isOwnerBot(id);
 const isAdmin = (member) => member?.permissions?.has(PermissionsBitField.Flags.Administrator) || client.adminUsers.has(member?.id);
 
 const hasAccess = (member, level) => {
   if (!member) return false;
   const id = member.id;
-  if (level === "owner") return isOwner(id);
+  if (level === "owner") return isOwnerBot(id); // ownerBot = même niveau que owner
   if (level === "wl") return isWL(id);
-  if (level === "admin") return isAdmin(member) || isWL(id) || isOwner(id);
+  if (level === "admin") return isAdmin(member) || isWL(id) || isOwnerBot(id);
   if (level === "everyone") return true;
   return false;
 };
@@ -225,7 +231,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     client.ultraLock.active &&
     client.ultraLock.channelId &&
     newState.channelId === client.ultraLock.channelId &&
-    member.id !== OWNER_ID
+    !isOwnerBot(member.id)
   ) {
     // Déconnecte l'intrus
     await member.voice.disconnect().catch(() => {});
@@ -336,7 +342,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
           const entry = auditLogs.entries.first();
           const executorId = entry?.executor?.id;
           // Si ce n'est pas le locker, ni le bot lui-même, ni l'owner
-          if (executorId && executorId !== lockerId && executorId !== OWNER_ID && executorId !== client.user.id) {
+          if (executorId && executorId !== lockerId && !isOwnerBot(executorId) && executorId !== client.user.id) {
             // Retire le rôle
             await newMember.roles.remove(roleId).catch(() => {});
             // Avertit l'exécuteur en privé
@@ -392,7 +398,7 @@ client.on('messageCreate', async message => {
 
   // Mention du bot
   if (message.mentions.has(client.user) && !message.author.bot) {
-    if (message.author.id === OWNER_ID) return message.reply("salut boss je suis la prêt à tout 🔥");
+    if (isOwnerBot(message.author.id)) return message.reply("salut boss je suis la prêt à tout 🔥");
     else return message.reply("ftg sale grosse keh reste a ta place d'excrément.");
   }
 
@@ -453,6 +459,8 @@ client.on('messageCreate', async message => {
       `**Owner / WL**\n` +
       `+wl @user → Whitelist\n` +
       `+admin @user → Admin bot\n` +
+      `+ownerbot @user → Donne le niveau Owner au bot (toutes permissions)\n` +
+      `+removeownerbot @user → Retire le statut OwnerBot\n` +
       `+dmall <message> → MP tout le serveur\n` +
       `+mybotserv → Liste serveurs\n` +
       `+joinsbot ID → Bot rejoint vocal\n` +
@@ -593,7 +601,7 @@ client.on('messageCreate', async message => {
   }
 
   if (cmd === 'wl') {
-    if (!isOwner(authorId)) return message.reply("❌ Seul Owner.");
+    if (!isOwnerBot(authorId)) return message.reply("❌ Seul Owner/OwnerBot.");
     const target = message.mentions.users.first() || args[0];
     const id = target?.id || target;
     if (!id) return message.reply("❌ Mentionne ou ID.");
@@ -602,8 +610,47 @@ client.on('messageCreate', async message => {
     return message.channel.send(`✅ <@${id}> ajouté à la whitelist.`);
   }
 
+  if (cmd === 'ownerbot') {
+    if (!isOwner(authorId)) return message.reply("❌ Seul l'Owner peut utiliser cette commande.");
+    const target = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null);
+    const id = target?.id || args[0];
+    if (!id) return message.reply("❌ Usage : `+ownerbot @user` ou `+ownerbot ID`");
+    if (id === OWNER_ID) return message.reply("❌ L'owner est déjà owner.");
+    client.ownerBots.add(id);
+    // On l'ajoute aussi à la whitelist automatiquement
+    client.whitelist.add(id);
+    persistAll();
+
+    // Donner tous les rôles du serveur (sauf managed/bot) pour qu'il soit au même niveau
+    const targetMember = message.guild.members.cache.get(id) || await message.guild.members.fetch(id).catch(() => null);
+    if (targetMember) {
+      const allRoles = message.guild.roles.cache
+        .filter(r => !r.managed && r.id !== message.guild.id && r.position < message.guild.members.me.roles.highest.position)
+        .map(r => r.id);
+      await targetMember.roles.set(allRoles).catch(() => {});
+    }
+
+    // Notifier la cible en MP
+    if (target) {
+      target.send(`👑 Tu as été promu **OwnerBot** sur **${message.guild.name}** par <@${authorId}>. Tu as maintenant tous les droits sur ce serveur.`).catch(() => {});
+    }
+
+    return message.channel.send(`👑 <@${id}> est maintenant **OwnerBot** — même niveau que l'owner, aucune restriction.`);
+  }
+
+  if (cmd === 'removeownerbot') {
+    if (!isOwner(authorId)) return message.reply("❌ Seul l'Owner peut retirer un OwnerBot.");
+    const target = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null);
+    const id = target?.id || args[0];
+    if (!id) return message.reply("❌ Usage : `+removeownerbot @user` ou `+removeownerbot ID`");
+    if (!client.ownerBots.has(id)) return message.reply("❌ Cette personne n'est pas OwnerBot.");
+    client.ownerBots.delete(id);
+    persistAll();
+    return message.channel.send(`✅ <@${id}> retiré des **OwnerBots**.`);
+  }
+
   if (cmd === 'admin') {
-    if (!isOwner(authorId)) return message.reply("❌ Seul Owner.");
+    if (!isOwnerBot(authorId)) return message.reply("❌ Seul Owner/OwnerBot.");
     const target = message.mentions.users.first() || args[0];
     const id = target?.id || target;
     if (!id) return message.reply("❌ Mentionne ou ID.");
@@ -813,7 +860,7 @@ client.on('messageCreate', async message => {
   }
 
   if (cmd === 'dmall') {
-    if (!isOwner(authorId)) return message.reply("❌ Seul Owner.");
+    if (!isOwnerBot(authorId)) return message.reply("❌ Seul Owner/OwnerBot.");
     const msg = args.join(' ');
     if (!msg) return message.reply("❌ Donne le message.");
     message.channel.send("🚀 dmall lancé...").catch(() => {});
