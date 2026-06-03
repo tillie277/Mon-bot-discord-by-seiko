@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const https = require('https');
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ChannelType, ActivityType, joinVoiceChannel } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ChannelType, ActivityType } = require('discord.js');
 
 // ====================== CONFIG ======================
 const MAIN_COLOR = "#8A2BE2";
@@ -463,7 +463,7 @@ client.on('messageCreate', async message => {
       `+removeownerbot @user → Retire le statut OwnerBot\n` +
       `+dmall <message> → MP tout le serveur\n` +
       `+mybotserv → Liste serveurs\n` +
-      `+joinsbot ID → Bot rejoint vocal\n` +
+      `+rules <message> → Poste le règlement en embed\n` +
       `+backup save/load → Backup rôles\n` +
       `+invitelogger → Active logger\n` +
       `+ghostjoins ID → Ghost joins\n` +
@@ -972,15 +972,6 @@ client.on('messageCreate', async message => {
     return message.channel.send(`**📋 Serveurs du bot :**\n${list || "Aucun serveur."}`);
   }
 
-  if (cmd === 'joinsbot') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const channelId = args[0];
-    const channel = message.guild.channels.cache.get(channelId);
-    if (!channel || channel.type !== ChannelType.GuildVoice) return message.reply("❌ Salon vocal introuvable.");
-    joinVoiceChannel({ channelId: channel.id, guildId: message.guild.id, adapterCreator: message.guild.voiceAdapterCreator });
-    return message.channel.send("✅ Bot rejoint le vocal.");
-  }
-
   if (cmd === 'backup') {
     if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
     if (args[0] === 'save') {
@@ -1092,6 +1083,25 @@ client.on('messageCreate', async message => {
     if (!target || !role) return message.reply("❌ @user @role");
     await target.roles.remove(role).catch(() => {});
     return message.channel.send(`✅ ${role.name} retiré à ${target}.`);
+  }
+
+  if (cmd === 'rules') {
+    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
+    const text = args.join(' ');
+    if (!text) return message.reply("❌ Usage : `+rules <ton texte de règlement>`");
+
+    const guildName = message.guild.name;
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📜 Règlement ${guildName}`)
+      .setDescription(text)
+      .setColor("#8A2BE2")
+      .setFooter({ text: `Règlement de ${guildName} • En rejoignant ce serveur, tu acceptes ces règles.` })
+      .setTimestamp()
+      .setThumbnail(message.guild.iconURL({ dynamic: true, size: 512 }) || null);
+
+    await message.delete().catch(() => {});
+    return message.channel.send({ embeds: [embed] });
   }
 
   message.reply("❌ Commande inconnue. Tape `+help` pour tout voir.");
