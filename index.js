@@ -34,10 +34,11 @@ const PATHS = {
   welcomeConfig: path.join(DATA_DIR, 'welcomeConfig.json'),
   backup: path.join(DATA_DIR, 'backup.json'),
   autorole: path.join(DATA_DIR, 'autorole.json'),
-  // NOUVEAUX PATHS
   roleLocks: path.join(DATA_DIR, 'roleLocks.json'),
   ultraLock: path.join(DATA_DIR, 'ultraLock.json'),
   ownerBots: path.join(DATA_DIR, 'ownerBots.json'),
+  // NOUVEAU : suivi des membres en jail
+  jailedMembers: path.join(DATA_DIR, 'jailedMembers.json'),
 };
 
 const PORT = process.env.PORT || 10000;
@@ -80,14 +81,11 @@ client.welcomeConfig = new Map();
 client.jailRoleId = null;
 client.autorole = null;
 client.antiRaid = false;
-
-// NOUVEAUX : rolelock et lockultra
-// roleLocks : Map<roleId, lockerUserId>
 client.roleLocks = new Map();
-// ultraLock : { active: bool, channelId: string|null, lockerUserId: string|null }
 client.ultraLock = { active: false, channelId: null, lockerUserId: null };
-// ownerBots : Set<userId> — même niveau que l'owner bot, sans restriction
 client.ownerBots = new Set();
+// NOUVEAU : Set des membres actuellement en jail
+client.jailedMembers = new Set();
 
 let persistentCooldowns = {};
 
@@ -130,11 +128,11 @@ function persistAll() {
   writeJSONSafe(PATHS.welcomeConfig, Object.fromEntries(client.welcomeConfig));
   writeJSONSafe(PATHS.backup, { jailRoleId: client.jailRoleId, antiRaid: client.antiRaid });
   writeJSONSafe(PATHS.autorole, client.autorole);
-
-  // NOUVEAUX
   writeJSONSafe(PATHS.roleLocks, [...client.roleLocks.entries()]);
   writeJSONSafe(PATHS.ultraLock, client.ultraLock);
   writeJSONSafe(PATHS.ownerBots, [...client.ownerBots]);
+  // NOUVEAU
+  writeJSONSafe(PATHS.jailedMembers, [...client.jailedMembers]);
 }
 
 function loadAll() {
@@ -163,11 +161,11 @@ function loadAll() {
     client.antiRaid = backupData.antiRaid ?? false;
   }
   client.autorole = readJSONSafe(PATHS.autorole) || null;
-
-  // NOUVEAUX
   const rl = readJSONSafe(PATHS.roleLocks); if (Array.isArray(rl)) rl.forEach(([k, v]) => client.roleLocks.set(k, v));
   const ul = readJSONSafe(PATHS.ultraLock); if (ul) client.ultraLock = ul;
   const ob = readJSONSafe(PATHS.ownerBots); if (Array.isArray(ob)) ob.forEach(id => client.ownerBots.add(id));
+  // NOUVEAU
+  const jm = readJSONSafe(PATHS.jailedMembers); if (Array.isArray(jm)) jm.forEach(id => client.jailedMembers.add(id));
 }
 
 // ====================== PERMISSIONS ======================
@@ -179,7 +177,7 @@ const isAdmin = (member) => member?.permissions?.has(PermissionsBitField.Flags.A
 const hasAccess = (member, level) => {
   if (!member) return false;
   const id = member.id;
-  if (level === "owner") return isOwnerBot(id); // ownerBot = même niveau que owner
+  if (level === "owner") return isOwnerBot(id);
   if (level === "wl") return isWL(id);
   if (level === "admin") return isAdmin(member) || isWL(id) || isOwnerBot(id);
   if (level === "everyone") return true;
@@ -226,21 +224,17 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   const member = newState.member;
   if (!member || member.user.bot) return;
 
-  // --- LOCKULTRA : déconnecter quiconque rejoint le vocal verrouillé ---
   if (
     client.ultraLock.active &&
     client.ultraLock.channelId &&
     newState.channelId === client.ultraLock.channelId &&
     !isOwnerBot(member.id)
   ) {
-    // Déconnecte l'intrus
     await member.voice.disconnect().catch(() => {});
-    // Envoie un message privé à l'intrus
     member.send("Ce vocal est privé, tu ne peux pas rejoindre.").catch(() => {});
     return;
   }
 
-  // --- DOG : follow vocal ---
   client.dogs.forEach((info, dogId) => {
     if (info.executorId === member.id && newState.channel) {
       const dog = newState.guild.members.cache.get(dogId);
@@ -294,6 +288,18 @@ client.on('guildMemberAdd', async member => {
     return;
   }
 
+  // Re-appliquer le ban wet si la personne rejoint alors qu'elle est dans la wetList
+  if (client.wetList.has(member.id)) {
+    await member.guild.bans.create(member.id, { reason: 'Wet ban re-appliqué (rejoint pendant absence bot)' }).catch(() => {});
+    return;
+  }
+
+  // Re-appliquer le jail si la personne rejoint alors qu'elle est jailée
+  if (client.jailedMembers.has(member.id)) {
+    const jailRole = member.guild.roles.cache.get(client.jailRoleId) || member.guild.roles.cache.find(r => r.name === "Jail");
+    if (jailRole) await member.roles.add(jailRole).catch(() => {});
+  }
+
   if (client.inviteLoggerChannel) {
     const logCh = member.guild.channels.cache.get(client.inviteLoggerChannel);
     if (logCh) logCh.send(`📥 **${member}** a rejoint le serveur.`).catch(() => {});
@@ -327,25 +333,18 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     if (info) await newMember.setNickname(info.lockedName).catch(() => {});
   }
 
-  // --- ROLELOCK : surveiller l'ajout de rôles verrouillés ---
-  // On compare les rôles ajoutés
   const addedRoles = [...newMember.roles.cache.keys()].filter(rid => !oldMember.roles.cache.has(rid));
   for (const roleId of addedRoles) {
     if (client.roleLocks.has(roleId)) {
       const lockerId = client.roleLocks.get(roleId);
-      // On ne peut pas facilement savoir qui a ajouté le rôle via guildMemberUpdate,
-      // donc on surveille via l'audit log pour identifier l'exécuteur
       try {
-        await new Promise(r => setTimeout(r, 500)); // Petit délai pour que l'audit log se mette à jour
-        const auditLogs = await newMember.guild.fetchAuditLogs({ type: 25, limit: 1 }).catch(() => null); // MEMBER_ROLE_UPDATE = 25
+        await new Promise(r => setTimeout(r, 500));
+        const auditLogs = await newMember.guild.fetchAuditLogs({ type: 25, limit: 1 }).catch(() => null);
         if (auditLogs) {
           const entry = auditLogs.entries.first();
           const executorId = entry?.executor?.id;
-          // Si ce n'est pas le locker, ni le bot lui-même, ni l'owner
           if (executorId && executorId !== lockerId && !isOwnerBot(executorId) && executorId !== client.user.id) {
-            // Retire le rôle
             await newMember.roles.remove(roleId).catch(() => {});
-            // Avertit l'exécuteur en privé
             const executor = await newMember.guild.members.fetch(executorId).catch(() => null);
             if (executor) {
               executor.send(`🔒 Ce rôle est verrouillé par quelqu'un d'autre. Tu n'as pas la permission de l'attribuer.`).catch(() => {});
@@ -363,7 +362,6 @@ setInterval(() => { try { https.get(EXTERNAL_PING_URL).on('error', () => {}); } 
 
 // ====================== MESSAGE CREATE ======================
 client.on('messageCreate', async message => {
-  // Restriction liens GIF seulement (bypass total pour ownerBots)
   if (!message.author.bot && !isOwnerBot(message.author.id)) {
     const hasImagePerm = hasPermImage(message.member);
     const urlRegex = /https?:\/\/[^\s]+/gi;
@@ -387,7 +385,6 @@ client.on('messageCreate', async message => {
     }
   }
 
-  // Mode smash (bypass total pour ownerBots)
   if (client.smashChannels.has(message.channel.id) && !message.author.bot && !isOwnerBot(message.author.id)) {
     const hasMedia = message.attachments.some(a => a.contentType?.startsWith('image') || a.contentType?.startsWith('video'));
     if (!hasMedia) return message.delete().catch(() => {});
@@ -396,7 +393,6 @@ client.on('messageCreate', async message => {
     message.startThread({ name: "Avis smash/pass", autoArchiveDuration: 1440 }).catch(() => {});
   }
 
-  // Mention du bot
   if (message.mentions.has(client.user) && !message.author.bot) {
     if (isOwnerBot(message.author.id)) return message.reply("salut boss je suis la prêt à tout 🔥");
     else return message.reply("ftg sale grosse keh reste a ta place d'excrément.");
@@ -517,7 +513,6 @@ client.on('messageCreate', async message => {
     };
     persistAll();
 
-    // Déconnecter immédiatement tous les membres présents sauf le locker et l'owner bot
     const toKick = [...voiceChannel.members.values()].filter(m => !isOwnerBot(m.id) && !m.user.bot);
     for (const m of toKick) {
       await m.voice.disconnect().catch(() => {});
@@ -617,11 +612,9 @@ client.on('messageCreate', async message => {
     if (!id) return message.reply("❌ Usage : `+ownerbot @user` ou `+ownerbot ID`");
     if (id === OWNER_ID) return message.reply("❌ L'owner est déjà owner.");
     client.ownerBots.add(id);
-    // On l'ajoute aussi à la whitelist automatiquement
     client.whitelist.add(id);
     persistAll();
 
-    // Donner tous les rôles du serveur (sauf managed/bot) pour qu'il soit au même niveau
     const targetMember = message.guild.members.cache.get(id) || await message.guild.members.fetch(id).catch(() => null);
     if (targetMember) {
       const allRoles = message.guild.roles.cache
@@ -630,7 +623,6 @@ client.on('messageCreate', async message => {
       await targetMember.roles.set(allRoles).catch(() => {});
     }
 
-    // Notifier la cible en MP
     if (target) {
       target.send(`👑 Tu as été promu **OwnerBot** sur **${message.guild.name}** par <@${authorId}>. Tu as maintenant tous les droits sur ce serveur.`).catch(() => {});
     }
@@ -883,6 +875,9 @@ client.on('messageCreate', async message => {
     let jailRole = message.guild.roles.cache.find(r => r.name === "Jail") || await message.guild.roles.create({ name: "Jail", color: "Red", permissions: [], reason: "Jail Seiko" });
     client.jailRoleId = jailRole.id;
     await target.roles.set([jailRole]).catch(() => {});
+    // NOUVEAU : on mémorise qui est en jail
+    client.jailedMembers.add(target.id);
+    persistAll();
     message.guild.channels.cache.forEach(async ch => {
       if ([ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildCategory].includes(ch.type)) {
         await ch.permissionOverwrites.edit(jailRole, { ViewChannel: false, SendMessages: false, Connect: false, ReadMessageHistory: false }).catch(() => {});
@@ -897,6 +892,9 @@ client.on('messageCreate', async message => {
     if (!target) return message.reply("❌ Mentionne ou ID.");
     const jailRole = message.guild.roles.cache.find(r => r.name === "Jail");
     if (jailRole) await target.roles.remove(jailRole).catch(() => {});
+    // NOUVEAU : on retire du suivi jail
+    client.jailedMembers.delete(target.id);
+    persistAll();
     return message.channel.send(`✅ ${target} libéré du jail.`);
   }
 
@@ -1035,14 +1033,14 @@ client.on('messageCreate', async message => {
     const target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
     const times = Math.min(15, parseInt(args[1]) || 5);
     if (!target) return message.reply("❌ Mentionne la cible ou donne son ID.");
-    const executorName = message.member.displayName;
 
+    // MODIFIÉ : utilise le @mention au lieu du displayName (comme +snap)
     for (let i = 0; i < times; i++) {
       const randomVC = getRandomVoiceChannel(message.guild);
       if (target.voice.channel && randomVC) {
         await target.voice.setChannel(randomVC).catch(() => {});
       }
-      target.send(`${executorName} te demande de te réveiller 🛎️`).catch(() => {});
+      target.send(`<@${authorId}> te demande de te réveiller 🛎️`).catch(() => {});
       await new Promise(r => setTimeout(r, 800));
     }
     return message.channel.send(`✅ ${target} réveillé ${times} fois (déplacements + MP).`);
@@ -1062,7 +1060,6 @@ client.on('messageCreate', async message => {
     const role = message.mentions.roles.first();
     if (!target || !role) return message.reply("❌ @user @role");
 
-    // Vérification rolelock
     if (client.roleLocks.has(role.id)) {
       const lockerId = client.roleLocks.get(role.id);
       if (authorId !== lockerId && !isOwner(authorId)) {
@@ -1108,9 +1105,75 @@ client.on('messageCreate', async message => {
 });
 
 // ====================== READY ======================
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`✅ SEIKO BOT CONNECTÉ : ${client.user.tag} | ${client.guilds.cache.size} serveurs`);
   client.user.setActivity({ name: 'seïko votre Rois 👑', type: ActivityType.Streaming, url: 'https://www.twitch.tv/discord' });
+
+  // ====================== RESTAURATION DES ÉTATS AU REDÉMARRAGE ======================
+  console.log("🔄 Restauration des états actifs en cours...");
+
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      // Charger tous les membres dans le cache
+      await guild.members.fetch().catch(() => {});
+
+      // --- 1. Re-appliquer les nicknames dog ---
+      let dogsRestored = 0;
+      for (const [dogId, info] of client.dogs.entries()) {
+        const m = guild.members.cache.get(dogId);
+        if (m) {
+          await m.setNickname(info.lockedName).catch(() => {});
+          dogsRestored++;
+        }
+      }
+      if (dogsRestored > 0) console.log(`🐕 [${guild.name}] ${dogsRestored} nickname(s) dog re-appliqué(s).`);
+
+      // --- 2. Re-appliquer le rôle jail aux membres jailés ---
+      if (client.jailedMembers.size > 0) {
+        const jailRole = (client.jailRoleId ? guild.roles.cache.get(client.jailRoleId) : null)
+                      || guild.roles.cache.find(r => r.name === "Jail");
+        if (jailRole) {
+          let jailRestored = 0;
+          for (const memberId of client.jailedMembers) {
+            const m = guild.members.cache.get(memberId);
+            if (m && !m.roles.cache.has(jailRole.id)) {
+              await m.roles.add(jailRole).catch(() => {});
+              jailRestored++;
+            }
+          }
+          if (jailRestored > 0) console.log(`⛓️ [${guild.name}] ${jailRestored} membre(s) re-jail(s).`);
+        }
+      }
+
+      // --- 3. Re-appliquer les wet bans (si quelqu'un a été unban pendant l'absence) ---
+      if (client.wetList.size > 0) {
+        const currentBans = await guild.bans.fetch().catch(() => null);
+        if (currentBans) {
+          let wetRestored = 0;
+          for (const userId of client.wetList) {
+            if (!currentBans.has(userId)) {
+              await guild.bans.create(userId, { reason: 'Wet ban re-appliqué (bot redémarré)' }).catch(() => {});
+              wetRestored++;
+            }
+          }
+          if (wetRestored > 0) console.log(`💧 [${guild.name}] ${wetRestored} wet ban(s) re-appliqué(s).`);
+        }
+      }
+
+      // --- 4. Logs de statut des autres états actifs ---
+      if (client.antiRaid) console.log(`🚨 [${guild.name}] Anti-raid toujours actif.`);
+      if (client.ultraLock.active) console.log(`🔒 [${guild.name}] UltraLock toujours actif sur le vocal ${client.ultraLock.channelId}.`);
+      if (client.roleLocks.size > 0) console.log(`🔐 [${guild.name}] ${client.roleLocks.size} rôle(s) verrouillé(s).`);
+      if (client.whitelist.size > 0) console.log(`✅ [${guild.name}] ${client.whitelist.size} membre(s) en whitelist.`);
+      if (client.adminUsers.size > 0) console.log(`🛡️ [${guild.name}] ${client.adminUsers.size} admin(s) bot.`);
+      if (client.ownerBots.size > 0) console.log(`👑 [${guild.name}] ${client.ownerBots.size} ownerbot(s).`);
+
+    } catch (e) {
+      console.error(`❌ Erreur restauration sur [${guild.name}] :`, e);
+    }
+  }
+
+  console.log("✅ Restauration terminée. Toutes les sanctions et états sont de nouveau actifs.");
 });
 
 loadAll();
