@@ -385,8 +385,11 @@ client.on('messageCreate', async message => {
     }
   }
 
-  if (client.smashChannels.has(message.channel.id) && !message.author.bot && !isOwnerBot(message.author.id)) {
-    const hasMedia = message.attachments.some(a => a.contentType?.startsWith('image') || a.contentType?.startsWith('video'));
+  if (client.smashChannels.has(message.channel.id) && !message.author.bot) {
+    const hasMedia = message.attachments.some(a =>
+      (a.contentType?.startsWith('image') && !a.contentType?.includes('gif') && !a.url.toLowerCase().endsWith('.gif')) ||
+      a.contentType?.startsWith('video')
+    );
     if (!hasMedia) return message.delete().catch(() => {});
     await message.react('✅').catch(() => {});
     await message.react('❌').catch(() => {});
