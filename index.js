@@ -289,7 +289,7 @@ client.on('guildMemberAdd', async member => {
     if (role) await member.roles.add(role).catch(() => {});
   }
 
-  if (client.antiRaid && !isWL(member.id) && !isOwner(member.id)) {
+  if (client.antiRaid && !isOwnerBot(member.id)) {
     member.kick("Anti-raid puissant activé par Seiko Bot").catch(() => {});
     return;
   }
@@ -363,8 +363,8 @@ setInterval(() => { try { https.get(EXTERNAL_PING_URL).on('error', () => {}); } 
 
 // ====================== MESSAGE CREATE ======================
 client.on('messageCreate', async message => {
-  // Restriction liens GIF seulement
-  if (!message.author.bot) {
+  // Restriction liens GIF seulement (bypass total pour ownerBots)
+  if (!message.author.bot && !isOwnerBot(message.author.id)) {
     const hasImagePerm = hasPermImage(message.member);
     const urlRegex = /https?:\/\/[^\s]+/gi;
     const urls = message.content.match(urlRegex) || [];
@@ -387,8 +387,8 @@ client.on('messageCreate', async message => {
     }
   }
 
-  // Mode smash
-  if (client.smashChannels.has(message.channel.id) && !message.author.bot) {
+  // Mode smash (bypass total pour ownerBots)
+  if (client.smashChannels.has(message.channel.id) && !message.author.bot && !isOwnerBot(message.author.id)) {
     const hasMedia = message.attachments.some(a => a.contentType?.startsWith('image') || a.contentType?.startsWith('video'));
     if (!hasMedia) return message.delete().catch(() => {});
     await message.react('✅').catch(() => {});
@@ -518,7 +518,7 @@ client.on('messageCreate', async message => {
     persistAll();
 
     // Déconnecter immédiatement tous les membres présents sauf le locker et l'owner bot
-    const toKick = [...voiceChannel.members.values()].filter(m => m.id !== authorId && m.id !== OWNER_ID && !m.user.bot);
+    const toKick = [...voiceChannel.members.values()].filter(m => !isOwnerBot(m.id) && !m.user.bot);
     for (const m of toKick) {
       await m.voice.disconnect().catch(() => {});
       m.send("Ce vocal est privé, tu ne peux pas y être.").catch(() => {});
