@@ -1431,7 +1431,11 @@ loadAll();
 setInterval(persistAll, 60000);
 
 const token = process.env.TOKEN;
-if (!token) { console.error('❌ TOKEN manquant dans .env'); process.exit(1); }
+if (!token) {
+    console.error('❌ TOKEN manquant dans les variables d\'environnement Render !');
+    console.error('Va dans Environment → Add Variable → TOKEN = ton_token');
+    process.exit(1);
+}
 
 client.login(token)
   .then(() => console.log('✅ Login réussi - Bot prêt !'))
