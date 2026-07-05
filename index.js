@@ -3,48 +3,58 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const https = require('https');
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField, ChannelType, ActivityType } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  PermissionsBitField,
+  ChannelType,
+  ActivityType,
+  SlashCommandBuilder
+} = require('discord.js');
 
-// ====================== CONFIG ======================
-const MAIN_COLOR = "#8A2BE2";
-const OWNER_ID = "685679698054742017";
+// ============================================================
+//  CONFIGURATION GÉNÉRALE
+// ============================================================
+const PREFIX = '+';
+const MAIN_COLOR = '#8A2BE2';
+const OWNER_ID = '685679698054742017'; // ID de l'Owner principal du bot
 const DATA_DIR = path.resolve(__dirname, 'data');
+const GIVEAWAY_EMOJI = '🎉';
+const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // limite Discord : 28 jours
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const PATHS = {
   whitelist: path.join(DATA_DIR, 'whitelist.json'),
   admin: path.join(DATA_DIR, 'admin.json'),
+  ownerBots: path.join(DATA_DIR, 'ownerBots.json'),
   blacklist: path.join(DATA_DIR, 'blacklist.json'),
   wetList: path.join(DATA_DIR, 'wetList.json'),
-  banList: path.join(DATA_DIR, 'banList.json'),
-  dogs: path.join(DATA_DIR, 'dogs.json'),
-  permMv: path.join(DATA_DIR, 'permMv.json'),
+  jailedMembers: path.join(DATA_DIR, 'jailedMembers.json'),
+  permMvRoles: path.join(DATA_DIR, 'permMvRoles.json'),
   limitRoles: path.join(DATA_DIR, 'limitRoles.json'),
-  lockedNames: path.join(DATA_DIR, 'lockedNames.json'),
-  cooldowns: path.join(DATA_DIR, 'cooldowns.json'),
-  pv: path.join(DATA_DIR, 'pvChannels.json'),
-  lockedTextChannels: path.join(DATA_DIR, 'lockedTextChannels.json'),
   inviteLogger: path.join(DATA_DIR, 'inviteLogger.json'),
   ghostJoins: path.join(DATA_DIR, 'ghostJoins.json'),
   fabulousUsers: path.join(DATA_DIR, 'fabulousUsers.json'),
   permAddRole: path.join(DATA_DIR, 'permAddRole.json'),
   permImageRoles: path.join(DATA_DIR, 'permImageRoles.json'),
-  smashChannels: path.join(DATA_DIR, 'smashChannels.json'),
-  welcomeConfig: path.join(DATA_DIR, 'welcomeConfig.json'),
-  backup: path.join(DATA_DIR, 'backup.json'),
+  settings: path.join(DATA_DIR, 'settings.json'),
+  rolesBackup: path.join(DATA_DIR, 'rolesBackup.json'),
   autorole: path.join(DATA_DIR, 'autorole.json'),
   roleLocks: path.join(DATA_DIR, 'roleLocks.json'),
   ultraLock: path.join(DATA_DIR, 'ultraLock.json'),
-  ownerBots: path.join(DATA_DIR, 'ownerBots.json'),
-  // NOUVEAU : suivi des membres en jail
-  jailedMembers: path.join(DATA_DIR, 'jailedMembers.json'),
+  warns: path.join(DATA_DIR, 'warns.json'),
+  forceRoles: path.join(DATA_DIR, 'forceRoles.json'),
+  giveaways: path.join(DATA_DIR, 'giveaways.json'),
 };
 
 const PORT = process.env.PORT || 10000;
-const EXTERNAL_PING_URL = "https://mon-bot-discord-by-seiko.onrender.com/";
+const EXTERNAL_PING_URL = process.env.PING_URL || 'https://mon-bot-discord-by-seiko.onrender.com/';
 
-// ====================== CLIENT ======================
+// ============================================================
+//  CLIENT DISCORD
+// ============================================================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -52,44 +62,40 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildInvites,
-    GatewayIntentBits.GuildPresences
+    GatewayIntentBits.GuildPresences,
   ]
 });
 
-// ====================== DATA ======================
+// ============================================================
+//  DONNÉES EN MÉMOIRE
+// ============================================================
 client.whitelist = new Set();
 client.adminUsers = new Set();
+client.ownerBots = new Set();
 client.blacklist = new Set();
 client.wetList = new Set();
-client.banList = new Set();
-client.dogs = new Map();
-client.permMvUsers = new Set();
-client.limitRoles = new Map();
-client.lockedNames = new Set();
-client.pvChannels = new Map();
-client.lockedTextChannels = new Set();
-client.snipes = new Map();
+client.jailedMembers = new Set();
+client.permMvRoles = new Set();
+client.limitRoles = new Map();      // roleId -> nombre max de membres
 client.inviteLoggerChannel = null;
 client.ghostJoinsChannel = null;
 client.fabulousUsers = new Set();
-client.permAddRole = new Map();
+client.permAddRole = new Map();     // roleId -> info (nombre)
 client.permImageRoles = new Set();
-client.smashChannels = new Set();
-client.welcomeConfig = new Map();
 client.jailRoleId = null;
 client.autorole = null;
 client.antiRaid = false;
-client.roleLocks = new Map();
+client.roleLocks = new Map();       // roleId -> userId (verrouilleur)
 client.ultraLock = { active: false, channelId: null, lockerUserId: null };
-client.ownerBots = new Set();
-// NOUVEAU : Set des membres actuellement en jail
-client.jailedMembers = new Set();
+client.warns = new Map();           // userId -> [{ reason, moderatorId, timestamp }]
+client.forceRoles = new Map();      // userId -> [roleId, ...]
+client.giveaways = new Map();       // messageId -> { channelId, guildId, prize, winnersCount, endTime, hostId, ended }
+client.snipes = new Map();
+client.joinTimestamps = new Map();  // userId -> timestamp (détection ghost joins, non persistant)
 
-let persistentCooldowns = {};
-
-// ====================== JSON UTILS ======================
+// ============================================================
+//  UTILITAIRES JSON
+// ============================================================
 const readJSONSafe = (p) => {
   try {
     if (!fs.existsSync(p)) return null;
@@ -101,104 +107,97 @@ const writeJSONSafe = (p, data) => {
   try { fs.writeFileSync(p, JSON.stringify(data, null, 2)); } catch (e) {}
 };
 
-// ====================== PERSISTENCE ======================
+// ============================================================
+//  PERSISTANCE
+// ============================================================
 function persistAll() {
   writeJSONSafe(PATHS.whitelist, [...client.whitelist]);
   writeJSONSafe(PATHS.admin, [...client.adminUsers]);
+  writeJSONSafe(PATHS.ownerBots, [...client.ownerBots]);
   writeJSONSafe(PATHS.blacklist, [...client.blacklist]);
   writeJSONSafe(PATHS.wetList, [...client.wetList]);
-  writeJSONSafe(PATHS.banList, [...client.banList]);
-  writeJSONSafe(PATHS.dogs, [...client.dogs.entries()]);
-  writeJSONSafe(PATHS.permMv, [...client.permMvUsers]);
+  writeJSONSafe(PATHS.jailedMembers, [...client.jailedMembers]);
+  writeJSONSafe(PATHS.permMvRoles, [...client.permMvRoles]);
   writeJSONSafe(PATHS.limitRoles, [...client.limitRoles.entries()]);
-  writeJSONSafe(PATHS.lockedNames, [...client.lockedNames]);
-  writeJSONSafe(PATHS.cooldowns, persistentCooldowns);
-
-  const pvObj = {};
-  client.pvChannels.forEach((v, k) => pvObj[k] = { allowed: [...v.allowed], ownerId: v.ownerId || null });
-  writeJSONSafe(PATHS.pv, pvObj);
-
-  writeJSONSafe(PATHS.lockedTextChannels, [...client.lockedTextChannels]);
   writeJSONSafe(PATHS.inviteLogger, client.inviteLoggerChannel);
   writeJSONSafe(PATHS.ghostJoins, client.ghostJoinsChannel);
   writeJSONSafe(PATHS.fabulousUsers, [...client.fabulousUsers]);
   writeJSONSafe(PATHS.permAddRole, [...client.permAddRole.entries()]);
   writeJSONSafe(PATHS.permImageRoles, [...client.permImageRoles]);
-  writeJSONSafe(PATHS.smashChannels, [...client.smashChannels]);
-  writeJSONSafe(PATHS.welcomeConfig, Object.fromEntries(client.welcomeConfig));
-  writeJSONSafe(PATHS.backup, { jailRoleId: client.jailRoleId, antiRaid: client.antiRaid });
+  writeJSONSafe(PATHS.settings, { jailRoleId: client.jailRoleId, antiRaid: client.antiRaid });
   writeJSONSafe(PATHS.autorole, client.autorole);
   writeJSONSafe(PATHS.roleLocks, [...client.roleLocks.entries()]);
   writeJSONSafe(PATHS.ultraLock, client.ultraLock);
-  writeJSONSafe(PATHS.ownerBots, [...client.ownerBots]);
-  // NOUVEAU
-  writeJSONSafe(PATHS.jailedMembers, [...client.jailedMembers]);
+  writeJSONSafe(PATHS.warns, [...client.warns.entries()]);
+  writeJSONSafe(PATHS.forceRoles, [...client.forceRoles.entries()]);
+  writeJSONSafe(PATHS.giveaways, [...client.giveaways.entries()]);
 }
 
 function loadAll() {
   const wl = readJSONSafe(PATHS.whitelist); if (Array.isArray(wl)) wl.forEach(id => client.whitelist.add(id));
   const adm = readJSONSafe(PATHS.admin); if (Array.isArray(adm)) adm.forEach(id => client.adminUsers.add(id));
+  const ob = readJSONSafe(PATHS.ownerBots); if (Array.isArray(ob)) ob.forEach(id => client.ownerBots.add(id));
   const bl = readJSONSafe(PATHS.blacklist); if (Array.isArray(bl)) bl.forEach(id => client.blacklist.add(id));
   const wet = readJSONSafe(PATHS.wetList); if (Array.isArray(wet)) wet.forEach(id => client.wetList.add(id));
-  const ban = readJSONSafe(PATHS.banList); if (Array.isArray(ban)) ban.forEach(id => client.banList.add(id));
-  const dogs = readJSONSafe(PATHS.dogs); if (Array.isArray(dogs)) dogs.forEach(([k, v]) => client.dogs.set(k, v));
-  const pmv = readJSONSafe(PATHS.permMv); if (Array.isArray(pmv)) pmv.forEach(id => client.permMvUsers.add(id));
+  const jm = readJSONSafe(PATHS.jailedMembers); if (Array.isArray(jm)) jm.forEach(id => client.jailedMembers.add(id));
+  const pmv = readJSONSafe(PATHS.permMvRoles); if (Array.isArray(pmv)) pmv.forEach(id => client.permMvRoles.add(id));
   const lr = readJSONSafe(PATHS.limitRoles); if (Array.isArray(lr)) lr.forEach(([k, v]) => client.limitRoles.set(k, v));
-  const ln = readJSONSafe(PATHS.lockedNames); if (Array.isArray(ln)) ln.forEach(id => client.lockedNames.add(id));
-  const cds = readJSONSafe(PATHS.cooldowns); if (cds) persistentCooldowns = cds;
-  const pv = readJSONSafe(PATHS.pv); if (pv) Object.entries(pv).forEach(([k, v]) => client.pvChannels.set(k, { allowed: new Set(v.allowed || []), ownerId: v.ownerId || null }));
-  const lockedTxt = readJSONSafe(PATHS.lockedTextChannels); if (Array.isArray(lockedTxt)) lockedTxt.forEach(id => client.lockedTextChannels.add(id));
   client.inviteLoggerChannel = readJSONSafe(PATHS.inviteLogger);
   client.ghostJoinsChannel = readJSONSafe(PATHS.ghostJoins);
   const fab = readJSONSafe(PATHS.fabulousUsers); if (Array.isArray(fab)) fab.forEach(id => client.fabulousUsers.add(id));
   const permAdd = readJSONSafe(PATHS.permAddRole); if (Array.isArray(permAdd)) permAdd.forEach(([k, v]) => client.permAddRole.set(k, v));
   const permImg = readJSONSafe(PATHS.permImageRoles); if (Array.isArray(permImg)) permImg.forEach(id => client.permImageRoles.add(id));
-  const smash = readJSONSafe(PATHS.smashChannels); if (Array.isArray(smash)) smash.forEach(id => client.smashChannels.add(id));
-  const welcomeData = readJSONSafe(PATHS.welcomeConfig); if (welcomeData) client.welcomeConfig = new Map(Object.entries(welcomeData));
-  const backupData = readJSONSafe(PATHS.backup);
-  if (backupData) {
-    client.jailRoleId = backupData.jailRoleId || null;
-    client.antiRaid = backupData.antiRaid ?? false;
-  }
+  const settings = readJSONSafe(PATHS.settings);
+  if (settings) { client.jailRoleId = settings.jailRoleId || null; client.antiRaid = settings.antiRaid ?? false; }
   client.autorole = readJSONSafe(PATHS.autorole) || null;
   const rl = readJSONSafe(PATHS.roleLocks); if (Array.isArray(rl)) rl.forEach(([k, v]) => client.roleLocks.set(k, v));
   const ul = readJSONSafe(PATHS.ultraLock); if (ul) client.ultraLock = ul;
-  const ob = readJSONSafe(PATHS.ownerBots); if (Array.isArray(ob)) ob.forEach(id => client.ownerBots.add(id));
-  // NOUVEAU
-  const jm = readJSONSafe(PATHS.jailedMembers); if (Array.isArray(jm)) jm.forEach(id => client.jailedMembers.add(id));
+  const warns = readJSONSafe(PATHS.warns); if (Array.isArray(warns)) warns.forEach(([k, v]) => client.warns.set(k, v));
+  const fr = readJSONSafe(PATHS.forceRoles); if (Array.isArray(fr)) fr.forEach(([k, v]) => client.forceRoles.set(k, v));
+  const gv = readJSONSafe(PATHS.giveaways); if (Array.isArray(gv)) gv.forEach(([k, v]) => client.giveaways.set(k, v));
 }
 
-// ====================== PERMISSIONS ======================
+// ============================================================
+//  PERMISSIONS — Hiérarchie : Owner > OwnerBot > WL > Admin > Tout le monde
+// ============================================================
 const isOwner = (id) => id === OWNER_ID;
-const isOwnerBot = (id) => client.ownerBots.has(id) || isOwner(id);
-const isWL = (id) => client.whitelist.has(id) || isOwnerBot(id);
-const isAdmin = (member) => member?.permissions?.has(PermissionsBitField.Flags.Administrator) || client.adminUsers.has(member?.id);
+const isOwnerBot = (id) => isOwner(id) || client.ownerBots.has(id);
+const isWL = (id) => isOwnerBot(id) || client.whitelist.has(id);
+const isAdminUser = (member) => !!member && (member.permissions?.has(PermissionsBitField.Flags.Administrator) || client.adminUsers.has(member.id));
 
 const hasAccess = (member, level) => {
   if (!member) return false;
   const id = member.id;
-  if (level === "owner") return isOwnerBot(id);
-  if (level === "wl") return isWL(id);
-  if (level === "admin") return isAdmin(member) || isWL(id) || isOwnerBot(id);
-  if (level === "everyone") return true;
-  return false;
+  if (level === 'owner') return isOwnerBot(id);
+  if (level === 'wl') return isWL(id);
+  if (level === 'admin') return isAdminUser(member) || isWL(id);
+  return true; // 'everyone'
 };
 
-const hasPermImage = (member) => {
-  if (!member) return false;
-  return [...member.roles.cache.keys()].some(roleId => client.permImageRoles.has(roleId));
-};
+const hasPermImage = (member) => !!member && [...member.roles.cache.keys()].some(id => client.permImageRoles.has(id));
+const hasPermMv = (member) => !!member && [...member.roles.cache.keys()].some(id => client.permMvRoles.has(id));
+const hasPermAddRole = (member) => !!member && [...member.roles.cache.keys()].some(id => client.permAddRole.has(id));
 
-// ====================== HELPERS ======================
+// ============================================================
+//  HELPERS
+// ============================================================
+async function resolveMember(message, idArg) {
+  return message.mentions.members.first() || (idArg ? await message.guild.members.fetch(idArg).catch(() => null) : null);
+}
+
+function resolveRole(message, idArg) {
+  return message.mentions.roles.first() || (idArg ? message.guild.roles.cache.get(idArg) : null);
+}
+
 function getStatusAndPlatform(member) {
-  if (!member.presence) return { status: "⚫ Hors ligne", platform: "Inconnu" };
-  const statusMap = { online: "🟢 En ligne", idle: "🟡 Inactif", dnd: "🔴 Ne pas déranger", offline: "⚫ Hors ligne" };
-  let statusText = statusMap[member.presence.status] || "⚫ Hors ligne";
-  let platform = "Inconnu";
+  if (!member.presence) return { status: '⚫ Hors ligne', platform: 'Inconnu' };
+  const statusMap = { online: '🟢 En ligne', idle: '🟡 Inactif', dnd: '🔴 Ne pas déranger', offline: '⚫ Hors ligne' };
+  const statusText = statusMap[member.presence.status] || '⚫ Hors ligne';
+  let platform = 'Inconnu';
   if (member.presence.clientStatus) {
-    if (member.presence.clientStatus.mobile) platform = "Mobile";
-    else if (member.presence.clientStatus.desktop) platform = "Ordinateur";
-    else if (member.presence.clientStatus.web) platform = "Web";
+    if (member.presence.clientStatus.mobile) platform = 'Mobile';
+    else if (member.presence.clientStatus.desktop) platform = 'Ordinateur';
+    else if (member.presence.clientStatus.web) platform = 'Web';
   }
   return { status: statusText, platform };
 }
@@ -213,40 +212,156 @@ async function ensureLogChannels(guild) {
   const out = {};
   for (const name of names) {
     let ch = guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildText);
-    if (!ch) ch = await guild.channels.create({ name, type: ChannelType.GuildText, reason: 'Logs par bot Seiko' }).catch(() => null);
+    if (!ch) ch = await guild.channels.create({ name, type: ChannelType.GuildText, reason: 'Logs du bot' }).catch(() => null);
     out[name.replace('-logs', '')] = ch;
   }
   return out;
 }
 
-// ====================== EVENTS ======================
+function parseDuration(str) {
+  if (!str) return null;
+  const match = /^(\d+)\s*(s|sec|secondes?|m|min|minutes?|h|heures?|d|j|jours?)$/i.exec(str.trim());
+  if (!match) return null;
+  const value = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+  if (unit.startsWith('s')) return value * 1000;
+  if (unit.startsWith('m')) return value * 60 * 1000;
+  if (unit.startsWith('h')) return value * 60 * 60 * 1000;
+  return value * 24 * 60 * 60 * 1000; // d / j / jours
+}
+
+function pickRandomWinners(pool, count) {
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(count, shuffled.length));
+}
+
+// ============================================================
+//  SYSTÈME DE GIVEAWAYS
+// ============================================================
+async function startGiveaway(channel, hostId, durationStr, winnersCount, prize) {
+  const durationMs = parseDuration(durationStr);
+  if (!durationMs) throw new Error('Durée invalide. Utilise un format comme 30s, 10m, 1h, 2d.');
+  if (!winnersCount || winnersCount < 1) throw new Error('Le nombre de gagnants doit être au moins 1.');
+  if (!prize) throw new Error('Indique un prix pour le giveaway.');
+
+  const endTime = Date.now() + durationMs;
+  const embed = new EmbedBuilder()
+    .setTitle(`🎉 GIVEAWAY : ${prize}`)
+    .setDescription(`Réagis avec ${GIVEAWAY_EMOJI} pour participer !\n\n🏆 Gagnants : **${winnersCount}**\n⏰ Fin : <t:${Math.floor(endTime / 1000)}:R>\n👤 Organisé par : <@${hostId}>`)
+    .setColor(MAIN_COLOR)
+    .setTimestamp(endTime);
+
+  const msg = await channel.send({ embeds: [embed] });
+  await msg.react(GIVEAWAY_EMOJI).catch(() => {});
+
+  client.giveaways.set(msg.id, { channelId: channel.id, guildId: channel.guild.id, prize, winnersCount, endTime, hostId, ended: false });
+  persistAll();
+  return msg;
+}
+
+async function endGiveawayById(id, isReroll = false) {
+  const data = client.giveaways.get(id);
+  if (!data) throw new Error('Giveaway introuvable.');
+
+  const channel = await client.channels.fetch(data.channelId).catch(() => null);
+  if (!channel) throw new Error('Salon du giveaway introuvable.');
+  const message = await channel.messages.fetch(id).catch(() => null);
+  if (!message) throw new Error('Message du giveaway introuvable.');
+
+  let winners = [];
+  const reaction = message.reactions.cache.get(GIVEAWAY_EMOJI);
+  if (reaction) {
+    const users = await reaction.users.fetch().catch(() => null);
+    if (users) winners = pickRandomWinners([...users.filter(u => !u.bot).values()], data.winnersCount);
+  }
+
+  if (!isReroll) {
+    data.ended = true;
+    client.giveaways.set(id, data);
+    persistAll();
+    const endedEmbed = new EmbedBuilder()
+      .setTitle(`🎉 GIVEAWAY TERMINÉ : ${data.prize}`)
+      .setDescription(winners.length ? `Gagnant(s) : ${winners.map(w => `<@${w.id}>`).join(', ')}` : "Personne n'a participé.")
+      .setColor(MAIN_COLOR);
+    await message.edit({ embeds: [endedEmbed] }).catch(() => {});
+  }
+
+  if (winners.length) {
+    await channel.send(`🎉 Félicitations ${winners.map(w => `<@${w.id}>`).join(', ')} ! Vous remportez **${data.prize}** !`).catch(() => {});
+  } else {
+    await channel.send(`😢 Aucun participant valide pour le giveaway **${data.prize}**.`).catch(() => {});
+  }
+  return winners;
+}
+
+const giveawayCommands = [
+  new SlashCommandBuilder()
+    .setName('gstart')
+    .setDescription('Démarre un giveaway')
+    .addStringOption(o => o.setName('duree').setDescription('Ex : 30s, 10m, 1h, 2d').setRequired(true))
+    .addIntegerOption(o => o.setName('gagnants').setDescription('Nombre de gagnants').setRequired(true))
+    .addStringOption(o => o.setName('prix').setDescription('Le prix à gagner').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('gend')
+    .setDescription('Termine un giveaway immédiatement')
+    .addStringOption(o => o.setName('id').setDescription('ID du giveaway (ID du message)').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('greroll')
+    .setDescription('Retire un ou plusieurs nouveaux gagnants')
+    .addStringOption(o => o.setName('id').setDescription('ID du giveaway').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('glist')
+    .setDescription('Liste les giveaways en cours'),
+].map(c => c.toJSON());
+
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+  const isAdminLevel = hasAccess(interaction.member, 'admin');
+
+  try {
+    if (interaction.commandName === 'gstart') {
+      if (!isAdminLevel) return interaction.reply({ content: '❌ Accès refusé.', ephemeral: true });
+      await startGiveaway(interaction.channel, interaction.user.id, interaction.options.getString('duree'), interaction.options.getInteger('gagnants'), interaction.options.getString('prix'));
+      return interaction.reply({ content: '✅ Giveaway lancé !', ephemeral: true });
+    }
+    if (interaction.commandName === 'gend') {
+      if (!isAdminLevel) return interaction.reply({ content: '❌ Accès refusé.', ephemeral: true });
+      await endGiveawayById(interaction.options.getString('id'));
+      return interaction.reply({ content: '✅ Giveaway terminé.', ephemeral: true });
+    }
+    if (interaction.commandName === 'greroll') {
+      if (!isAdminLevel) return interaction.reply({ content: '❌ Accès refusé.', ephemeral: true });
+      await endGiveawayById(interaction.options.getString('id'), true);
+      return interaction.reply({ content: '✅ Reroll effectué.', ephemeral: true });
+    }
+    if (interaction.commandName === 'glist') {
+      const active = [...client.giveaways.entries()].filter(([, d]) => !d.ended);
+      if (!active.length) return interaction.reply({ content: 'Aucun giveaway en cours.', ephemeral: true });
+      const desc = active.map(([id, d]) => `🎁 **${d.prize}** — <#${d.channelId}> — fin <t:${Math.floor(d.endTime / 1000)}:R> — ID: \`${id}\``).join('\n');
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🎉 Giveaways en cours').setDescription(desc).setColor(MAIN_COLOR)] });
+    }
+  } catch (e) {
+    const payload = { content: `❌ ${e.message}`, ephemeral: true };
+    if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => {});
+    else await interaction.reply(payload).catch(() => {});
+  }
+});
+
+// ============================================================
+//  EVENTS
+// ============================================================
 client.on('voiceStateUpdate', async (oldState, newState) => {
   const member = newState.member;
   if (!member || member.user.bot) return;
 
-  if (
-    client.ultraLock.active &&
-    client.ultraLock.channelId &&
-    newState.channelId === client.ultraLock.channelId &&
-    !isOwnerBot(member.id)
-  ) {
+  if (client.ultraLock.active && client.ultraLock.channelId && newState.channelId === client.ultraLock.channelId && !isOwnerBot(member.id)) {
     await member.voice.disconnect().catch(() => {});
-    member.send("Ce vocal est privé, tu ne peux pas rejoindre.").catch(() => {});
-    return;
+    member.send('Ce vocal est privé, tu ne peux pas rejoindre.').catch(() => {});
   }
-
-  client.dogs.forEach((info, dogId) => {
-    if (info.executorId === member.id && newState.channel) {
-      const dog = newState.guild.members.cache.get(dogId);
-      if (dog && dog.voice.channel?.id !== newState.channel.id) {
-        dog.voice.setChannel(newState.channel).catch(() => {});
-      }
-    }
-  });
 });
 
 client.on('messageDelete', async message => {
-  if (!message?.author || message.author.bot) return;
+  if (!message?.author || message.author.bot || !message.guild) return;
 
   if (message.content || message.attachments.size > 0) {
     client.snipes.set(message.channel.id, {
@@ -258,46 +373,49 @@ client.on('messageDelete', async message => {
   }
 
   const logs = await ensureLogChannels(message.guild);
-  const logCh = logs.messages;
-  if (!logCh) return;
+  if (!logs.messages) return;
 
   const embed = new EmbedBuilder()
-    .setTitle("🗑️ Message supprimé")
+    .setTitle('🗑️ Message supprimé')
     .setColor(MAIN_COLOR)
     .setTimestamp()
     .addFields(
-      { name: "Auteur", value: `${message.author} (${message.author.id})`, inline: true },
-      { name: "Salon", value: `${message.channel}`, inline: true },
-      { name: "Heure", value: `<t:${Math.floor(Date.now()/1000)}:F>`, inline: true }
+      { name: 'Auteur', value: `${message.author} (${message.author.id})`, inline: true },
+      { name: 'Salon', value: `${message.channel}`, inline: true },
+      { name: 'Heure', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
     );
-
   if (message.content) embed.setDescription(message.content);
   if (message.attachments.size) embed.setImage(message.attachments.first().url);
-
-  logCh.send({ embeds: [embed] }).catch(() => {});
+  logs.messages.send({ embeds: [embed] }).catch(() => {});
 });
 
 client.on('guildMemberAdd', async member => {
+  client.joinTimestamps.set(member.id, Date.now());
+  setTimeout(() => client.joinTimestamps.delete(member.id), 5 * 60 * 1000);
+
   if (client.autorole) {
     const role = member.guild.roles.cache.get(client.autorole);
     if (role) await member.roles.add(role).catch(() => {});
   }
 
   if (client.antiRaid && !isOwnerBot(member.id)) {
-    member.kick("Anti-raid puissant activé par Seiko Bot").catch(() => {});
-    return;
+    return member.kick('Anti-raid actif').catch(() => {});
   }
 
-  // Re-appliquer le ban wet si la personne rejoint alors qu'elle est dans la wetList
   if (client.wetList.has(member.id)) {
-    await member.guild.bans.create(member.id, { reason: 'Wet ban re-appliqué (rejoint pendant absence bot)' }).catch(() => {});
-    return;
+    return member.guild.bans.create(member.id, { reason: 'Wet ban ré-appliqué (retour pendant absence du bot)' }).catch(() => {});
   }
 
-  // Re-appliquer le jail si la personne rejoint alors qu'elle est jailée
   if (client.jailedMembers.has(member.id)) {
-    const jailRole = member.guild.roles.cache.get(client.jailRoleId) || member.guild.roles.cache.find(r => r.name === "Jail");
+    const jailRole = member.guild.roles.cache.get(client.jailRoleId) || member.guild.roles.cache.find(r => r.name === 'Jail');
     if (jailRole) await member.roles.add(jailRole).catch(() => {});
+  }
+
+  if (client.forceRoles.has(member.id)) {
+    for (const roleId of client.forceRoles.get(member.id)) {
+      const role = member.guild.roles.cache.get(roleId);
+      if (role) await member.roles.add(role).catch(() => {});
+    }
   }
 
   if (client.inviteLoggerChannel) {
@@ -307,103 +425,119 @@ client.on('guildMemberAdd', async member => {
 });
 
 client.on('guildMemberRemove', async member => {
-  let leaveCh = member.guild.channels.cache.find(c => c.name.toLowerCase() === "leave");
-  if (!leaveCh) leaveCh = await member.guild.channels.create({ name: "leave", type: ChannelType.GuildText }).catch(() => null);
-  if (!leaveCh) return;
+  let leaveCh = member.guild.channels.cache.find(c => c.name.toLowerCase() === 'leave');
+  if (!leaveCh) leaveCh = await member.guild.channels.create({ name: 'leave', type: ChannelType.GuildText }).catch(() => null);
+  if (leaveCh) {
+    const embed = new EmbedBuilder()
+      .setTitle(`🚪 Départ de ${member.guild.name}`)
+      .setDescription(`<@${member.id}> a quitté le serveur.`)
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 1024 }))
+      .setColor(MAIN_COLOR)
+      .setTimestamp();
+    leaveCh.send({ embeds: [embed] }).catch(() => {});
+  }
 
-  const embed = new EmbedBuilder()
-    .setTitle(`🚪 Départ de ${member.guild.name}`)
-    .setDescription(`<@${member.id}> a quitté le serveur. 😢`)
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 1024 }))
-    .setColor(MAIN_COLOR)
-    .setTimestamp();
-  leaveCh.send({ embeds: [embed] }).catch(() => {});
+  if (client.ghostJoinsChannel && client.joinTimestamps.has(member.id)) {
+    const elapsed = Date.now() - client.joinTimestamps.get(member.id);
+    if (elapsed < 15000) {
+      const ghostCh = member.guild.channels.cache.get(client.ghostJoinsChannel);
+      if (ghostCh) ghostCh.send(`👻 **Ghost join détecté** : ${member.user.tag} a quitté ${Math.round(elapsed / 1000)}s après son arrivée.`).catch(() => {});
+    }
+  }
+  client.joinTimestamps.delete(member.id);
 });
 
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   const logs = await ensureLogChannels(newMember.guild);
-  const boostCh = logs.boost;
-  if (boostCh) {
-    if (!oldMember.premiumSince && newMember.premiumSince) boostCh.send(`🎉 ${newMember} a boosté le serveur !`).catch(() => {});
-    else if (oldMember.premiumSince && !newMember.premiumSince) boostCh.send(`😢 ${newMember} a cessé de booster.`).catch(() => {});
+  if (logs.boost) {
+    if (!oldMember.premiumSince && newMember.premiumSince) logs.boost.send(`🎉 ${newMember} a boosté le serveur !`).catch(() => {});
+    else if (oldMember.premiumSince && !newMember.premiumSince) logs.boost.send(`😢 ${newMember} a cessé de booster.`).catch(() => {});
   }
 
-  if (client.lockedNames.has(newMember.id) && oldMember.nickname !== newMember.nickname) {
-    const info = client.dogs.get(newMember.id);
-    if (info) await newMember.setNickname(info.lockedName).catch(() => {});
-  }
+  const addedRoles = [...newMember.roles.cache.keys()].filter(id => !oldMember.roles.cache.has(id));
+  const removedRoles = [...oldMember.roles.cache.keys()].filter(id => !newMember.roles.cache.has(id));
 
-  const addedRoles = [...newMember.roles.cache.keys()].filter(rid => !oldMember.roles.cache.has(rid));
   for (const roleId of addedRoles) {
+    // Rôles verrouillés : seul le verrouilleur (ou l'owner) peut les attribuer
     if (client.roleLocks.has(roleId)) {
       const lockerId = client.roleLocks.get(roleId);
       try {
         await new Promise(r => setTimeout(r, 500));
         const auditLogs = await newMember.guild.fetchAuditLogs({ type: 25, limit: 1 }).catch(() => null);
-        if (auditLogs) {
-          const entry = auditLogs.entries.first();
-          const executorId = entry?.executor?.id;
-          if (executorId && executorId !== lockerId && !isOwnerBot(executorId) && executorId !== client.user.id) {
-            await newMember.roles.remove(roleId).catch(() => {});
-            const executor = await newMember.guild.members.fetch(executorId).catch(() => null);
-            if (executor) {
-              executor.send(`🔒 Ce rôle est verrouillé par quelqu'un d'autre. Tu n'as pas la permission de l'attribuer.`).catch(() => {});
-            }
-          }
+        const executorId = auditLogs?.entries?.first()?.executor?.id;
+        if (executorId && executorId !== lockerId && !isOwnerBot(executorId) && executorId !== client.user.id) {
+          await newMember.roles.remove(roleId).catch(() => {});
+          const executor = await newMember.guild.members.fetch(executorId).catch(() => null);
+          if (executor) executor.send("🔒 Ce rôle est verrouillé par quelqu'un d'autre. Tu n'as pas la permission de l'attribuer.").catch(() => {});
         }
       } catch (e) {}
+    }
+
+    // Limite de membres par rôle
+    if (client.limitRoles.has(roleId)) {
+      const role = newMember.guild.roles.cache.get(roleId);
+      const max = client.limitRoles.get(roleId);
+      if (role && role.members.size > max) {
+        await newMember.roles.remove(roleId).catch(() => {});
+        newMember.send(`❌ Le rôle **${role.name}** a atteint sa limite de ${max} membres.`).catch(() => {});
+      }
+    }
+  }
+
+  // Rôles forcés : ré-attribution automatique s'ils sont retirés
+  if (client.forceRoles.has(newMember.id)) {
+    const forced = client.forceRoles.get(newMember.id);
+    for (const roleId of removedRoles) {
+      if (forced.includes(roleId)) {
+        const role = newMember.guild.roles.cache.get(roleId);
+        if (role) await newMember.roles.add(role).catch(() => {});
+      }
     }
   }
 });
 
-// ====================== KEEP ALIVE ======================
-http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Bot is alive - Seiko Edition'); }).listen(PORT, '0.0.0.0', () => console.log(`✅ Keep-alive on port ${PORT}`));
+// ============================================================
+//  KEEP ALIVE (hébergement type Render)
+// ============================================================
+http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Bot en ligne.'); }).listen(PORT, '0.0.0.0', () => console.log(`✅ Keep-alive sur le port ${PORT}`));
 setInterval(() => { try { https.get(EXTERNAL_PING_URL).on('error', () => {}); } catch (e) {} }, 300000);
 
-// ====================== MESSAGE CREATE ======================
-client.on('messageCreate', async message => {
-  if (!message.author.bot && !isOwnerBot(message.author.id)) {
-    const hasImagePerm = hasPermImage(message.member);
-    const urlRegex = /https?:\/\/[^\s]+/gi;
-    const urls = message.content.match(urlRegex) || [];
-    
-    let hasNonGifLink = false;
-    for (const url of urls) {
-      if (!url.toLowerCase().endsWith('.gif')) {
-        hasNonGifLink = true;
-        break;
-      }
-    }
+// Vérification périodique des giveaways à terminer
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, data] of client.giveaways.entries()) {
+    if (!data.ended && data.endTime <= now) endGiveawayById(id).catch(() => {});
+  }
+}, 20000);
 
-    const hasGifAttachment = message.attachments.some(att => 
-      att.contentType?.includes('image/gif') || att.url.toLowerCase().endsWith('.gif')
-    );
+// ============================================================
+//  MESSAGE CREATE
+// ============================================================
+client.on('messageCreate', async message => {
+  if (!message.guild || message.author.bot) return;
+
+  // Filtre anti-lien (GIF only, sauf rôle permimage / owner-tier)
+  if (!isOwnerBot(message.author.id)) {
+    const hasImagePerm = hasPermImage(message.member);
+    const urls = message.content.match(/https?:\/\/[^\s]+/gi) || [];
+    const hasNonGifLink = urls.some(url => !url.toLowerCase().endsWith('.gif'));
+    const hasGifAttachment = message.attachments.some(att => att.contentType?.includes('image/gif') || att.url.toLowerCase().endsWith('.gif'));
 
     if (hasNonGifLink && !hasGifAttachment && !hasImagePerm) {
       await message.delete().catch(() => {});
-      return message.channel.send(`❌ <@${message.author.id}> seuls les liens **GIF** sont autorisés (ou rôle perm image).`).then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
+      return message.channel.send(`❌ <@${message.author.id}> seuls les liens **GIF** sont autorisés (ou rôle perm image).`)
+        .then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
     }
   }
 
-  if (client.smashChannels.has(message.channel.id) && !message.author.bot) {
-    const hasMedia = message.attachments.some(a =>
-      (a.contentType?.startsWith('image') && !a.contentType?.includes('gif') && !a.url.toLowerCase().endsWith('.gif')) ||
-      a.contentType?.startsWith('video')
-    );
-    if (!hasMedia) return message.delete().catch(() => {});
-    await message.react('✅').catch(() => {});
-    await message.react('❌').catch(() => {});
-    message.startThread({ name: "Avis smash/pass", autoArchiveDuration: 1440 }).catch(() => {});
+  if (message.mentions.has(client.user)) {
+    if (isOwnerBot(message.author.id)) return message.reply('Salut boss, prêt à tout 🔥');
+    return message.reply('👋 Salut ! Tape `+help` pour voir toutes mes commandes.');
   }
 
-  if (message.mentions.has(client.user) && !message.author.bot) {
-    if (isOwnerBot(message.author.id)) return message.reply("salut boss je suis la prêt à tout 🔥");
-    else return message.reply("ftg sale grosse keh reste a ta place d'excrément.");
-  }
+  if (!message.content.startsWith(PREFIX)) return;
 
-  if (!message.content.startsWith('+') || message.author.bot) return;
-
-  const args = message.content.slice(1).trim().split(/ +/);
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd = args.shift().toLowerCase();
   const authorId = message.author.id;
   const member = message.member;
@@ -411,78 +545,650 @@ client.on('messageCreate', async message => {
   const logs = await ensureLogChannels(message.guild);
   if (logs.commande) logs.commande.send(`📌 **${message.author.tag}** a utilisé : \`${message.content}\``).catch(() => {});
 
-  // ==================== COMMANDES ====================
+  // ==================== GÉNÉRAL ====================
 
   if (cmd === 'help') {
-    const embed = new EmbedBuilder().setTitle("📜 Commandes Seiko Bot").setColor(MAIN_COLOR).setDescription(
-      `**Général**\n` +
-      `+pic @user → Photo de profil\n` +
-      `+banner @user → Bannière\n` +
-      `+ui @user → Infos utilisateur\n` +
-      `+snipe → Dernier message supprimé\n\n` +
-      `**Modération**\n` +
-      `+lock / +unlock → Verrouille/déverrouille salon\n` +
-      `+clear @user <nb> → Supprime messages\n` +
-      `+slowmode <secondes> → Mode lent\n` +
-      `+derank @user → Dé-rank\n` +
-      `+addrole @user @role → Ajoute rôle\n` +
-      `+delrole @user @role → Retire rôle\n` +
-      `+rolemembers @role → Liste membres du rôle\n` +
-      `+jail @user → Jail\n` +
-      `+unjail @user → Libère jail\n` +
-      `+antiraid → Anti-raid puissant\n` +
-      `+limitrole @role <max> → Limite rôle\n` +
-      `+permimage @role → Autorise liens normaux\n` +
-      `+rolelock @role → Verrouille un rôle (seul toi peux l'attribuer)\n` +
-      `+roleunlock @role → Déverrouille un rôle\n\n` +
-      `**Vocal**\n` +
-      `+lockultra → Verrouille ton vocal (personne ne peut rejoindre, même les admins)\n` +
-      `+unlockultra → Déverrouille ton vocal\n\n` +
-      `**Fun / Utilitaires**\n` +
-      `+dog @user → Dog + follow vocal\n` +
-      `+undog @user / +undogall → Libère\n` +
-      `+wet @user → Wet ban spécial\n` +
-      `+unwet @user → Dé-wet\n` +
-      `+bl @user / +unbl @user → Blacklist\n` +
-      `+smash → Mode smash (images/vidéos only)\n` +
-      `+fabulousbot @user → Fabulousbot\n` +
-      `+wakeup @user <times> → Réveille (déplace vocal + MP)\n` +
-      `+snap @user → Demande snap\n` +
-      `+flood ID @user <10> → Spam\n` +
-      `+say ID <message> → Envoie dans salon\n` +
-      `+delchannel ID → Supprime salon\n` +
-      `+permmv @role → Perm +mv\n` +
-      `+mv @user → Déplace en vocal\n` +
-      `+Permaddrole @role <count> → Perm +addrole\n` +
-      `+delpermaddrole @role → Retire perm +addrole\n\n` +
-      `**Owner / WL**\n` +
-      `+wl @user → Whitelist\n` +
-      `+admin @user → Admin bot\n` +
-      `+ownerbot @user → Donne le niveau Owner au bot (toutes permissions)\n` +
-      `+removeownerbot @user → Retire le statut OwnerBot\n` +
-      `+dmall <message> → MP tout le serveur\n` +
-      `+mybotserv → Liste serveurs\n` +
-      `+rules <message> → Poste le règlement en embed\n` +
-      `+backup save/load → Backup rôles\n` +
-      `+invitelogger → Active logger\n` +
-      `+ghostjoins ID → Ghost joins\n` +
-      `+unbanall → Débannit tout\n` +
-      `+mutealls → Mute tout le vocal\n` +
-      `+randomvoc → Déplace aléatoirement\n` +
-      `+ping → Test\n`
+    const embed = new EmbedBuilder().setTitle('📜 Commandes du bot').setColor(MAIN_COLOR).setDescription(
+      '**Général**\n' +
+      '+pic [@user] · +banner [@user] · +ui [@user] · +serverinfo/+si\n' +
+      '+snipe · +ping · +mybotserv · +perms [wl/admin/owner]\n\n' +
+      '**Modération**\n' +
+      '+lock/+unlock · +clear [@user] <n> · +slowmode <s> · +derank @user\n' +
+      '+addrole/+delrole @user @role · +rolemembers @role · +nick @user <nom|reset>\n' +
+      '+timeout/+untimeout @user <durée> · +rules <texte>\n\n' +
+      '**Avertissements**\n' +
+      '+warn @user <raison> · +warnlist @user · +clearwarns @user (WL) · +allwarns (Owner)\n\n' +
+      '**Sanctions avancées (WL)**\n' +
+      '+jail/+unjail @user · +wet/+unwet @user · +bl/+unbl @user\n' +
+      '+antiraid · +unbanall\n\n' +
+      '**Vocal**\n' +
+      '+mute/+unmute @user · +mutealls/+unmuteall · +mv @user · +randomvoc\n' +
+      '+lockultra/+unlockultra (WL)\n\n' +
+      '**Giveaways** (+ ou /)\n' +
+      '+gstart <durée> <gagnants> <prix> · +gend <ID> · +greroll <ID> · +glist\n\n' +
+      '**Fun / Utilitaires**\n' +
+      '+fabulousbot @user (WL) · +say <ID> <msg> · +delchannel <ID> · +dmall <msg> (Owner)\n\n' +
+      '**Listes** (Admin+)\n' +
+      '+lists · +wllist · +adminlist · +ownerlist · +jaillist · +wetlist · +blacklist · +banlist\n\n' +
+      '**Rôles & permissions (WL)**\n' +
+      '+limitrole @role <max> · +permimage @role · +permmv @role\n' +
+      '+permaddrole/+delpermaddrole @role · +rolelock/+roleunlock @role\n' +
+      '+autorole @role · +sayroleselection <texte>\n\n' +
+      '**Owner**\n' +
+      '+wl/+unwl @user · +admin @user · +ownerbot/+removeownerbot @user\n' +
+      '+forcerole/+unforcerole @user @role · +invitelogger · +ghostjoins <ID>\n' +
+      '+backup save/load · +exportconfig'
     );
     return message.channel.send({ embeds: [embed] });
   }
 
-  // ==================== ROLELOCK ====================
+  if (cmd === 'perms') {
+    const tier = (args[0] || '').toLowerCase();
+    let title, desc;
+    if (tier === 'owner') {
+      title = '👑 Commandes Owner / OwnerBot';
+      desc = '+wl, +unwl, +admin, +ownerbot, +removeownerbot, +forcerole, +unforcerole, +invitelogger, +ghostjoins, +backup, +exportconfig, +dmall, +allwarns';
+    } else if (tier === 'wl') {
+      title = '🌟 Commandes Whitelist';
+      desc = '+jail, +unjail, +wet, +unwet, +bl, +unbl, +antiraid, +lockultra, +unlockultra, +limitrole, +permimage, +permmv, +permaddrole, +delpermaddrole, +rolelock, +roleunlock, +autorole, +sayroleselection, +fabulousbot, +clearwarns';
+    } else if (tier === 'admin') {
+      title = '🛡️ Commandes Admin';
+      desc = '+lock, +unlock, +clear, +slowmode, +derank, +addrole, +delrole, +rolemembers, +nick, +timeout, +untimeout, +rules, +warn, +warnlist, +mute, +unmute, +mutealls, +unmuteall, +mv, +randomvoc, +unbanall, +say, +delchannel, +gstart, +gend, +greroll, +lists';
+    } else {
+      title = '📜 Hiérarchie des permissions';
+      desc = 'Owner > OwnerBot > Whitelist (WL) > Admin > Tout le monde\n\nUtilise `+perms owner`, `+perms wl` ou `+perms admin` pour le détail.';
+    }
+    return message.channel.send({ embeds: [new EmbedBuilder().setTitle(title).setDescription(desc).setColor(MAIN_COLOR)] });
+  }
+
+  if (cmd === 'pic') {
+    const target = await resolveMember(message, args[0]) || message.member;
+    return message.channel.send({ embeds: [new EmbedBuilder().setTitle(`📸 Photo de ${target.user.tag}`).setImage(target.user.displayAvatarURL({ dynamic: true, size: 1024 })).setColor(MAIN_COLOR)] });
+  }
+
+  if (cmd === 'banner') {
+    const targetUser = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null) || message.author;
+    try {
+      const user = await client.users.fetch(targetUser.id, { force: true });
+      if (!user.banner) return message.reply("❌ Cette personne n'a pas de bannière.");
+      return message.channel.send({ embeds: [new EmbedBuilder().setTitle(`🖼️ Bannière de ${user.tag}`).setImage(user.bannerURL({ dynamic: true, size: 1024 })).setColor(MAIN_COLOR)] });
+    } catch { return message.reply('❌ Erreur bannière.'); }
+  }
+
+  if (cmd === 'ui') {
+    const target = await resolveMember(message, args[0]) || message.member;
+    const user = target.user;
+    const { status, platform } = getStatusAndPlatform(target);
+    const createdDays = Math.floor((Date.now() - user.createdTimestamp) / 86400000);
+    const joinedDays = target.joinedAt ? Math.floor((Date.now() - target.joinedAt) / 86400000) : 0;
+    const embed = new EmbedBuilder()
+      .setTitle(user.tag)
+      .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 128 }))
+      .setColor(MAIN_COLOR)
+      .addFields(
+        { name: 'ID', value: user.id, inline: true },
+        { name: 'Statut', value: status, inline: true },
+        { name: 'Plateforme', value: platform, inline: true },
+        { name: 'Vocal', value: target.voice?.channel ? '✅ Oui' : '❌ Non', inline: true },
+        { name: 'Compte créé', value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F> (**${createdDays} j**)`, inline: true },
+        { name: 'Rejoint le', value: target.joinedAt ? `<t:${Math.floor(target.joinedAt / 1000)}:F> (**${joinedDays} j**)` : 'Inconnu', inline: true },
+        { name: 'Rôles', value: target.roles.cache.filter(r => r.id !== target.guild.id).map(r => r.toString()).join(' ') || 'Aucun' }
+      );
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  if (cmd === 'serverinfo' || cmd === 'si') {
+    const g = message.guild;
+    const owner = await g.fetchOwner().catch(() => null);
+    const embed = new EmbedBuilder()
+      .setTitle(`📊 ${g.name}`)
+      .setThumbnail(g.iconURL({ dynamic: true, size: 512 }))
+      .setColor(MAIN_COLOR)
+      .addFields(
+        { name: 'ID', value: g.id, inline: true },
+        { name: 'Propriétaire', value: owner ? owner.user.tag : 'Inconnu', inline: true },
+        { name: 'Membres', value: `${g.memberCount}`, inline: true },
+        { name: 'Rôles', value: `${g.roles.cache.size}`, inline: true },
+        { name: 'Salons', value: `${g.channels.cache.size}`, inline: true },
+        { name: 'Boosts', value: `Niveau ${g.premiumTier} (${g.premiumSubscriptionCount || 0})`, inline: true },
+        { name: 'Créé le', value: `<t:${Math.floor(g.createdTimestamp / 1000)}:F>` }
+      );
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  if (cmd === 'snipe') {
+    const snipe = client.snipes.get(message.channel.id);
+    if (!snipe) return message.reply('❌ Aucun message à sniper.');
+    const embed = new EmbedBuilder()
+      .setTitle('🔍 Dernier message supprimé')
+      .setDescription(snipe.content || '*Pas de texte*')
+      .setFooter({ text: `Par ${snipe.author.tag} • il y a ${Math.floor((Date.now() - snipe.timestamp) / 1000)}s` })
+      .setColor(MAIN_COLOR);
+    if (snipe.attachments) embed.setImage(snipe.attachments);
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  if (cmd === 'ping') return message.channel.send('🏓 Pong ! Je suis bien en ligne.');
+
+  if (cmd === 'mybotserv') {
+    const list = client.guilds.cache.map(g => `• ${g.name} (${g.id}) — ${g.memberCount} membres`).join('\n');
+    return message.channel.send(`**📋 Serveurs du bot :**\n${list || 'Aucun serveur.'}`);
+  }
+
+  // ==================== MODÉRATION (ADMIN) ====================
+
+  if (cmd === 'lock') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false }).catch(() => {});
+    return message.channel.send('🔒 Salon verrouillé.');
+  }
+
+  if (cmd === 'unlock') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }).catch(() => {});
+    return message.channel.send('🔓 Salon déverrouillé.');
+  }
+
+  if (cmd === 'clear') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    let targetUser = message.mentions.users.first();
+    let amountIndex = 0;
+    if (!targetUser && args[0] && /^\d{15,20}$/.test(args[0])) {
+      targetUser = await client.users.fetch(args[0]).catch(() => null);
+      amountIndex = 1;
+    } else if (targetUser) amountIndex = 1;
+    let amount = Math.min(500, Math.max(1, parseInt(args[amountIndex]) || 100));
+    try {
+      const messages = await message.channel.messages.fetch({ limit: 100 });
+      const toDelete = targetUser ? messages.filter(m => m.author.id === targetUser.id).first(amount) : messages.first(amount);
+      if (!toDelete || toDelete.length === 0 || toDelete.size === 0) return message.reply('❌ Rien à supprimer.');
+      await message.channel.bulkDelete(toDelete, true);
+      const msg = await message.channel.send(`✅ ${toDelete.length ?? toDelete.size} messages supprimés.`);
+      setTimeout(() => msg.delete().catch(() => {}), 4000);
+    } catch (e) { return message.reply('❌ Erreur clear.'); }
+  }
+
+  if (cmd === 'slowmode') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const secs = Math.max(0, parseInt(args[0]) || 0);
+    await message.channel.setRateLimitPerUser(secs).catch(() => {});
+    return message.channel.send(`⏳ Slowmode mis à ${secs} secondes.`);
+  }
+
+  if (cmd === 'derank') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Mentionne la cible ou donne son ID.');
+    await target.roles.set([]).catch(() => {});
+    return message.channel.send(`✅ ${target} déranké.`);
+  }
+
+  if (cmd === 'addrole') {
+    if (!hasAccess(member, 'admin') && !hasPermAddRole(member)) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    const role = resolveRole(message, args[1]);
+    if (!target || !role) return message.reply('❌ Usage : +addrole @user @role');
+    if (client.roleLocks.has(role.id)) {
+      const lockerId = client.roleLocks.get(role.id);
+      if (authorId !== lockerId && !isOwner(authorId)) {
+        message.author.send(`🔒 Ce rôle est verrouillé. Seul <@${lockerId}> peut l'attribuer.`).catch(() => {});
+        return message.reply("❌ Ce rôle est verrouillé par quelqu'un d'autre.");
+      }
+    }
+    await target.roles.add(role).catch(() => {});
+    return message.channel.send(`✅ Rôle ajouté à ${target}.`);
+  }
+
+  if (cmd === 'delrole') {
+    if (!hasAccess(member, 'admin') && !hasPermAddRole(member)) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    const role = resolveRole(message, args[1]);
+    if (!target || !role) return message.reply('❌ Usage : +delrole @user @role');
+    await target.roles.remove(role).catch(() => {});
+    return message.channel.send(`✅ ${role.name} retiré à ${target}.`);
+  }
+
+  if (cmd === 'rolemembers') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const role = resolveRole(message, args[0]);
+    if (!role) return message.reply('❌ Mentionne le rôle ou donne son ID.');
+    const count = role.members.size;
+    const embed = new EmbedBuilder().setTitle(`👥 Membres du rôle ${role.name}`).setDescription(`**${count}** personne(s)`).setColor(MAIN_COLOR);
+    if (count > 0) embed.addFields({ name: 'Liste', value: role.members.map(m => m.toString()).join('\n').slice(0, 1024) || 'Aucun' });
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  if (cmd === 'nick') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Usage : +nick @user <surnom|reset>');
+    const value = args.slice(1).join(' ');
+    if (!value) return message.reply('❌ Indique un surnom ou "reset".');
+    const newNick = value.toLowerCase() === 'reset' ? null : value;
+    await target.setNickname(newNick).catch(() => {});
+    return message.channel.send(`✅ Surnom ${newNick ? `changé en **${newNick}**` : 'réinitialisé'} pour ${target}.`);
+  }
+
+  if (cmd === 'timeout') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Usage : +timeout @user <durée> [raison]');
+    const ms = parseDuration(args[1]);
+    if (!ms) return message.reply('❌ Durée invalide (ex : 10m, 1h, 2d).');
+    const reason = args.slice(2).join(' ') || 'Aucune raison fournie';
+    await target.timeout(Math.min(ms, MAX_TIMEOUT_MS), reason).catch(() => {});
+    return message.channel.send(`⏱️ ${target} timeout pour ${args[1]} (${reason}).`);
+  }
+
+  if (cmd === 'untimeout') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Usage : +untimeout @user');
+    await target.timeout(null).catch(() => {});
+    return message.channel.send(`✅ Timeout retiré pour ${target}.`);
+  }
+
+  if (cmd === 'rules') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const text = args.join(' ');
+    if (!text) return message.reply('❌ Usage : +rules <texte du règlement>');
+    const embed = new EmbedBuilder()
+      .setTitle(`📜 Règlement ${message.guild.name}`)
+      .setDescription(text)
+      .setColor(MAIN_COLOR)
+      .setFooter({ text: `Règlement de ${message.guild.name} • En rejoignant ce serveur, tu acceptes ces règles.` })
+      .setTimestamp()
+      .setThumbnail(message.guild.iconURL({ dynamic: true, size: 512 }) || null);
+    await message.delete().catch(() => {});
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  // ==================== AVERTISSEMENTS ====================
+
+  if (cmd === 'warn') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Usage : +warn @user <raison>');
+    const reason = args.slice(1).join(' ') || 'Aucune raison fournie';
+    const list = client.warns.get(target.id) || [];
+    list.push({ reason, moderatorId: authorId, timestamp: Date.now() });
+    client.warns.set(target.id, list);
+    persistAll();
+    let extra = '';
+    if (list.length >= 5) {
+      await target.roles.set([]).catch(() => {});
+      extra = '\n⚠️ **5 avertissements atteints : tous les rôles ont été retirés (auto-derank).**';
+    }
+    return message.channel.send(`⚠️ ${target} averti (${list.length}/5). Raison : ${reason}${extra}`);
+  }
+
+  if (cmd === 'warnlist') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Usage : +warnlist @user');
+    const list = client.warns.get(target.id) || [];
+    if (!list.length) return message.channel.send(`✅ ${target} n'a aucun avertissement.`);
+    const desc = list.map((w, i) => `**${i + 1}.** ${w.reason} — <t:${Math.floor(w.timestamp / 1000)}:R> (par <@${w.moderatorId}>)`).join('\n');
+    return message.channel.send({ embeds: [new EmbedBuilder().setTitle(`⚠️ Avertissements de ${target.user.tag}`).setDescription(desc).setColor(MAIN_COLOR)] });
+  }
+
+  if (cmd === 'clearwarns') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Usage : +clearwarns @user');
+    client.warns.delete(target.id);
+    persistAll();
+    return message.channel.send(`✅ Avertissements de ${target} effacés.`);
+  }
+
+  if (cmd === 'allwarns') {
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot.');
+    if (!client.warns.size) return message.channel.send('✅ Aucun avertissement enregistré.');
+    const desc = [...client.warns.entries()].map(([uid, list]) => `<@${uid}> : **${list.length}** avertissement(s)`).join('\n');
+    return message.channel.send({ embeds: [new EmbedBuilder().setTitle('⚠️ Tous les avertissements').setDescription(desc).setColor(MAIN_COLOR)] });
+  }
+
+  // ==================== SANCTIONS AVANCÉES (WL) ====================
+
+  if (cmd === 'jail') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Mentionne la cible ou donne son ID.');
+    let jailRole = message.guild.roles.cache.find(r => r.name === 'Jail')
+      || await message.guild.roles.create({ name: 'Jail', color: 'Red', permissions: [], reason: 'Jail' });
+    client.jailRoleId = jailRole.id;
+    await target.roles.set([jailRole]).catch(() => {});
+    client.jailedMembers.add(target.id);
+    persistAll();
+    for (const ch of message.guild.channels.cache.values()) {
+      if ([ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildCategory].includes(ch.type)) {
+        await ch.permissionOverwrites.edit(jailRole, { ViewChannel: false, SendMessages: false, Connect: false, ReadMessageHistory: false }).catch(() => {});
+      }
+    }
+    return message.channel.send(`⛓️ ${target} en jail.`);
+  }
+
+  if (cmd === 'unjail') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Mentionne la cible ou donne son ID.');
+    const jailRole = message.guild.roles.cache.find(r => r.name === 'Jail');
+    if (jailRole) await target.roles.remove(jailRole).catch(() => {});
+    client.jailedMembers.delete(target.id);
+    persistAll();
+    return message.channel.send(`✅ ${target} libéré du jail.`);
+  }
+
+  if (cmd === 'wet') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const targetUser = message.mentions.users.first();
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Mentionne ou ID.');
+    client.wetList.add(id);
+    persistAll();
+    try {
+      await message.guild.bans.create(id, { reason: 'Ban renforcé (anti-évasion)' });
+      return message.channel.send(`✅ <@${id}> banni (anti-évasion activé).`);
+    } catch {
+      return message.channel.send(`✅ <@${id}> ajouté à la liste anti-évasion.`);
+    }
+  }
+
+  if (cmd === 'unwet') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const targetUser = message.mentions.users.first();
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Mentionne ou ID.');
+    if (!client.wetList.has(id)) return message.reply("❌ Pas dans la liste anti-évasion.");
+    client.wetList.delete(id);
+    persistAll();
+    await message.guild.members.unban(id).catch(() => {});
+    return message.channel.send(`✅ <@${id}> retiré de la liste anti-évasion.`);
+  }
+
+  if (cmd === 'bl') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const targetUser = message.mentions.users.first();
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Mentionne ou ID.');
+    client.blacklist.add(id);
+    persistAll();
+    return message.channel.send(`✅ <@${id}> ajouté à la blacklist.`);
+  }
+
+  if (cmd === 'unbl') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const targetUser = message.mentions.users.first();
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Mentionne ou ID.');
+    if (!client.blacklist.has(id)) return message.reply('❌ Pas dans la blacklist.');
+    client.blacklist.delete(id);
+    persistAll();
+    return message.channel.send(`✅ <@${id}> retiré de la blacklist.`);
+  }
+
+  if (cmd === 'antiraid') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    client.antiRaid = !client.antiRaid;
+    persistAll();
+    return message.channel.send(`🚨 Anti-raid **${client.antiRaid ? 'activé' : 'désactivé'}** : les nouveaux membres non WL/Owner sont kickés instantanément.`);
+  }
+
+  if (cmd === 'unbanall') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const bans = await message.guild.bans.fetch().catch(() => new Map());
+    let count = 0;
+    for (const [id] of bans) { await message.guild.members.unban(id).catch(() => {}); count++; }
+    return message.channel.send(`✅ ${count} membres débannis.`);
+  }
+
+  // ==================== VOCAL ====================
+
+  if (cmd === 'mute') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target || !target.voice.channel) return message.reply('❌ Cible non en vocal.');
+    await target.voice.setMute(true).catch(() => {});
+    return message.channel.send(`🔇 ${target} muté.`);
+  }
+
+  if (cmd === 'unmute') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target || !target.voice.channel) return message.reply('❌ Cible non en vocal.');
+    await target.voice.setMute(false).catch(() => {});
+    return message.channel.send(`🔊 ${target} démuté.`);
+  }
+
+  if (cmd === 'mutealls') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    if (!member.voice.channel) return message.reply('❌ Tu dois être en vocal.');
+    member.voice.channel.members.forEach(m => m.voice.setMute(true).catch(() => {}));
+    return message.channel.send('✅ Tout le vocal a été muté.');
+  }
+
+  if (cmd === 'unmuteall') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    if (!member.voice.channel) return message.reply('❌ Tu dois être en vocal.');
+    member.voice.channel.members.forEach(m => m.voice.setMute(false).catch(() => {}));
+    return message.channel.send('✅ Tout le vocal a été démuté.');
+  }
+
+  if (cmd === 'mv') {
+    if (!hasAccess(member, 'admin') && !hasPermMv(member)) return message.reply('❌ Accès refusé.');
+    const target = await resolveMember(message, args[0]);
+    if (!target || !target.voice.channel) return message.reply('❌ Cible non en vocal.');
+    if (!member.voice.channel) return message.reply('❌ Tu dois être en vocal.');
+    await target.voice.setChannel(member.voice.channel).catch(() => {});
+    return message.channel.send(`✅ ${target} déplacé dans ton vocal.`);
+  }
+
+  if (cmd === 'randomvoc') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    if (!member.voice.channel) return message.reply('❌ Tu dois être en vocal.');
+    const vcs = message.guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice && c.id !== member.voice.channel.id);
+    if (vcs.size === 0) return message.reply('❌ Pas d\'autres vocaux.');
+    member.voice.channel.members.forEach(m => { if (m.voice.channel) m.voice.setChannel(vcs.random()).catch(() => {}); });
+    return message.channel.send('🔀 Membres déplacés aléatoirement.');
+  }
+
+  if (cmd === 'lockultra') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    if (!member.voice.channel) return message.reply('❌ Tu dois être dans un salon vocal.');
+    if (client.ultraLock.active) return message.reply('❌ Un lockultra est déjà actif. Utilise `+unlockultra` d\'abord.');
+    const voiceChannel = member.voice.channel;
+    client.ultraLock = { active: true, channelId: voiceChannel.id, lockerUserId: authorId };
+    persistAll();
+    const toKick = [...voiceChannel.members.values()].filter(m => !isOwnerBot(m.id) && !m.user.bot);
+    for (const m of toKick) { await m.voice.disconnect().catch(() => {}); m.send('Ce vocal est privé, tu ne peux pas y être.').catch(() => {}); }
+    return message.channel.send(`🔒 **LOCKULTRA activé** sur **${voiceChannel.name}**.`);
+  }
+
+  if (cmd === 'unlockultra') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    if (!client.ultraLock.active) return message.reply('❌ Aucun lockultra actif.');
+    if (client.ultraLock.lockerUserId !== authorId && !isOwner(authorId)) {
+      return message.reply(`❌ Ce lockultra a été activé par <@${client.ultraLock.lockerUserId}>. Seul lui ou l'owner peut le désactiver.`);
+    }
+    client.ultraLock = { active: false, channelId: null, lockerUserId: null };
+    persistAll();
+    return message.channel.send('🔓 **LOCKULTRA désactivé.**');
+  }
+
+  // ==================== GIVEAWAYS ====================
+
+  if (cmd === 'gstart') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    try {
+      await startGiveaway(message.channel, authorId, args[0], parseInt(args[1]), args.slice(2).join(' '));
+    } catch (e) { return message.reply(`❌ ${e.message}`); }
+    return;
+  }
+
+  if (cmd === 'gend') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    if (!args[0]) return message.reply('❌ Usage : +gend <ID>');
+    try { await endGiveawayById(args[0]); return message.channel.send('✅ Giveaway terminé.'); }
+    catch (e) { return message.reply(`❌ ${e.message}`); }
+  }
+
+  if (cmd === 'greroll') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    if (!args[0]) return message.reply('❌ Usage : +greroll <ID>');
+    try { await endGiveawayById(args[0], true); return message.channel.send('✅ Reroll effectué.'); }
+    catch (e) { return message.reply(`❌ ${e.message}`); }
+  }
+
+  if (cmd === 'glist') {
+    const active = [...client.giveaways.entries()].filter(([, d]) => !d.ended);
+    if (!active.length) return message.reply('Aucun giveaway en cours.');
+    const desc = active.map(([id, d]) => `🎁 **${d.prize}** — <#${d.channelId}> — fin <t:${Math.floor(d.endTime / 1000)}:R> — ID: \`${id}\``).join('\n');
+    return message.channel.send({ embeds: [new EmbedBuilder().setTitle('🎉 Giveaways en cours').setDescription(desc).setColor(MAIN_COLOR)] });
+  }
+
+  // ==================== FUN / UTILITAIRES ====================
+
+  if (cmd === 'fabulousbot') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Mentionne la cible.');
+    let role = message.guild.roles.cache.find(r => r.name === '✨ Fabulous');
+    if (!role) role = await message.guild.roles.create({ name: '✨ Fabulous', color: 'Fuchsia', reason: 'Fabulousbot' }).catch(() => null);
+    client.fabulousUsers.add(target.id);
+    persistAll();
+    if (role) await target.roles.add(role).catch(() => {});
+    return message.channel.send(`✨ ${target} est maintenant **fabulousbot** !`);
+  }
+
+  if (cmd === 'say') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const chId = args[0];
+    const text = args.slice(1).join(' ');
+    if (!chId || !text) return message.reply('❌ Usage : +say <ID salon> <message>');
+    const ch = client.channels.cache.get(chId);
+    if (ch?.isTextBased()) ch.send(text).catch(() => {});
+    return message.channel.send('✅ Message envoyé.');
+  }
+
+  if (cmd === 'delchannel') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const ch = message.guild.channels.cache.get(args[0]);
+    if (!ch) return message.reply('❌ Salon introuvable.');
+    await ch.delete().catch(() => {});
+    return message.channel.send('✅ Salon supprimé.');
+  }
+
+  if (cmd === 'dmall') {
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot.');
+    const msg = args.join(' ');
+    if (!msg) return message.reply('❌ Donne le message.');
+    message.channel.send('🚀 Envoi en cours...').catch(() => {});
+    let sent = 0;
+    const members = [...message.guild.members.cache.values()].filter(m => !m.user.bot);
+    for (let i = 0; i < members.length; i++) {
+      try { await members[i].send(msg); sent++; } catch {}
+      if ((i + 1) % 10 === 0) message.channel.send(`📊 Progression : ${Math.round((sent / members.length) * 100)}%`).catch(() => {});
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    return message.channel.send(`✅ Terminé : ${sent}/${members.length} messages envoyés.`);
+  }
+
+  // ==================== LISTES (ADMIN) ====================
+
+  if (cmd === 'lists') {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+    const embed = new EmbedBuilder().setTitle("📋 Vue d'ensemble").setColor(MAIN_COLOR).addFields(
+      { name: 'Whitelist', value: `${client.whitelist.size}`, inline: true },
+      { name: 'Admins bot', value: `${client.adminUsers.size}`, inline: true },
+      { name: 'OwnerBots', value: `${client.ownerBots.size}`, inline: true },
+      { name: 'Jail', value: `${client.jailedMembers.size}`, inline: true },
+      { name: 'Anti-évasion', value: `${client.wetList.size}`, inline: true },
+      { name: 'Blacklist', value: `${client.blacklist.size}`, inline: true },
+      { name: 'Rôles verrouillés', value: `${client.roleLocks.size}`, inline: true },
+      { name: 'Giveaways actifs', value: `${[...client.giveaways.values()].filter(g => !g.ended).length}`, inline: true }
+    );
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  if (['wllist', 'adminlist', 'ownerlist', 'jaillist', 'wetlist', 'blacklist', 'banlist'].includes(cmd)) {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
+
+    if (cmd === 'banlist') {
+      const bans = await message.guild.bans.fetch().catch(() => new Map());
+      const desc = [...bans.values()].slice(0, 40).map(b => `${b.user.tag} (${b.user.id})`).join('\n') || 'Aucun banni.';
+      return message.channel.send({ embeds: [new EmbedBuilder().setTitle(`🔨 Bannissements (${bans.size})`).setDescription(desc).setColor(MAIN_COLOR)] });
+    }
+
+    let ids = [];
+    let title = '';
+    if (cmd === 'wllist') { ids = [...client.whitelist]; title = '🌟 Whitelist'; }
+    if (cmd === 'adminlist') { ids = [...client.adminUsers]; title = '🛡️ Admins bot'; }
+    if (cmd === 'ownerlist') { ids = [OWNER_ID, ...client.ownerBots]; title = '👑 Owners & OwnerBots'; }
+    if (cmd === 'jaillist') { ids = [...client.jailedMembers]; title = '⛓️ Membres en jail'; }
+    if (cmd === 'wetlist') { ids = [...client.wetList]; title = '💧 Liste anti-évasion'; }
+    if (cmd === 'blacklist') { ids = [...client.blacklist]; title = '🚫 Blacklist'; }
+
+    const unique = [...new Set(ids)];
+    const desc = unique.length ? unique.map(id => `<@${id}>`).join('\n') : 'Aucun.';
+    return message.channel.send({ embeds: [new EmbedBuilder().setTitle(`${title} (${unique.length})`).setDescription(desc).setColor(MAIN_COLOR)] });
+  }
+
+  // ==================== RÔLES & PERMISSIONS (WL) ====================
+
+  if (cmd === 'limitrole') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const role = resolveRole(message, args[0]);
+    const max = parseInt(args[1]);
+    if (!role || !max) return message.reply('❌ Usage : +limitrole @role <max>');
+    client.limitRoles.set(role.id, max);
+    persistAll();
+    return message.channel.send(`✅ Limite du rôle **${role.name}** fixée à ${max} membres.`);
+  }
+
+  if (cmd === 'permimage') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const role = resolveRole(message, args[0]);
+    if (!role) return message.reply('❌ Mentionne le rôle ou donne son ID.');
+    client.permImageRoles.add(role.id);
+    persistAll();
+    return message.channel.send(`✅ Rôle **${role.name}** peut maintenant envoyer tous les liens.`);
+  }
+
+  if (cmd === 'permmv') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const role = resolveRole(message, args[0]);
+    if (!role) return message.reply('❌ Mentionne un rôle ou donne son ID.');
+    client.permMvRoles.add(role.id);
+    persistAll();
+    return message.channel.send(`✅ Le rôle **${role.name}** peut maintenant utiliser +mv.`);
+  }
+
+  if (cmd === 'permaddrole') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const role = resolveRole(message, args[0]);
+    const count = parseInt(args[1]) || 999;
+    if (!role) return message.reply('❌ Usage : +permaddrole @role <count>');
+    client.permAddRole.set(role.id, count);
+    persistAll();
+    return message.channel.send(`✅ Le rôle **${role.name}** peut maintenant utiliser +addrole / +delrole.`);
+  }
+
+  if (cmd === 'delpermaddrole') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const role = resolveRole(message, args[0]);
+    if (!role) return message.reply('❌ Mentionne le rôle ou donne son ID.');
+    client.permAddRole.delete(role.id);
+    persistAll();
+    return message.channel.send(`✅ Permission +addrole retirée pour **${role.name}**.`);
+  }
 
   if (cmd === 'rolelock') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
-    if (!role) return message.reply("❌ Mentionne le rôle ou donne son ID. Usage : `+rolelock @role`");
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const role = resolveRole(message, args[0]);
+    if (!role) return message.reply('❌ Usage : +rolelock @role');
     if (client.roleLocks.has(role.id)) {
       const currentLocker = client.roleLocks.get(role.id);
-      if (currentLocker !== authorId && !isOwner(authorId)) return message.reply(`❌ Ce rôle est déjà verrouillé par <@${currentLocker}>.`);
+      if (currentLocker !== authorId && !isOwner(authorId)) return message.reply(`❌ Déjà verrouillé par <@${currentLocker}>.`);
     }
     client.roleLocks.set(role.id, authorId);
     persistAll();
@@ -490,129 +1196,72 @@ client.on('messageCreate', async message => {
   }
 
   if (cmd === 'roleunlock') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
-    if (!role) return message.reply("❌ Mentionne le rôle. Usage : `+roleunlock @role`");
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const role = resolveRole(message, args[0]);
+    if (!role) return message.reply('❌ Usage : +roleunlock @role');
     if (!client.roleLocks.has(role.id)) return message.reply("❌ Ce rôle n'est pas verrouillé.");
     const currentLocker = client.roleLocks.get(role.id);
-    if (currentLocker !== authorId && !isOwner(authorId)) return message.reply(`❌ Ce rôle est verrouillé par <@${currentLocker}>. Seul lui ou l'owner peut le déverrouiller.`);
+    if (currentLocker !== authorId && !isOwner(authorId)) return message.reply(`❌ Verrouillé par <@${currentLocker}>. Seul lui ou l'owner peut déverrouiller.`);
     client.roleLocks.delete(role.id);
     persistAll();
     return message.channel.send(`🔓 Rôle **${role.name}** déverrouillé.`);
   }
 
-  // ==================== LOCKULTRA ====================
-
-  if (cmd === 'lockultra') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    if (!member.voice.channel) return message.reply("❌ Tu dois être dans un salon vocal pour utiliser +lockultra.");
-    if (client.ultraLock.active) return message.reply("❌ Un lockultra est déjà actif. Utilise `+unlockultra` d'abord.");
-
-    const voiceChannel = member.voice.channel;
-    client.ultraLock = {
-      active: true,
-      channelId: voiceChannel.id,
-      lockerUserId: authorId
-    };
+  if (cmd === 'autorole') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const role = resolveRole(message, args[0]);
+    if (!role) return message.reply('❌ Mentionne le rôle ou donne son ID.');
+    client.autorole = role.id;
     persistAll();
-
-    const toKick = [...voiceChannel.members.values()].filter(m => !isOwnerBot(m.id) && !m.user.bot);
-    for (const m of toKick) {
-      await m.voice.disconnect().catch(() => {});
-      m.send("Ce vocal est privé, tu ne peux pas y être.").catch(() => {});
-    }
-
-    return message.channel.send(`🔒 **LOCKULTRA activé** sur **${voiceChannel.name}**. Personne ne peut rejoindre (sauf le owner bot).`);
+    return message.channel.send(`✅ Autorole **${role.name}** configuré.`);
   }
 
-  if (cmd === 'unlockultra') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    if (!client.ultraLock.active) return message.reply("❌ Aucun lockultra actif.");
-    if (client.ultraLock.lockerUserId !== authorId && !isOwner(authorId)) {
-      return message.reply(`❌ Ce lockultra a été activé par <@${client.ultraLock.lockerUserId}>. Seul lui ou l'owner peut le désactiver.`);
-    }
-    client.ultraLock = { active: false, channelId: null, lockerUserId: null };
-    persistAll();
-    return message.channel.send("🔓 **LOCKULTRA désactivé.** Le vocal est de nouveau accessible.");
+  if (cmd === 'sayroleselection') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    const text = args.join(' ');
+    if (!text) return message.reply('❌ Donne le message.');
+    await message.channel.send(text);
+    return message.channel.send('✅ Message envoyé. Ajoute tes réactions pour les rôles.');
   }
 
-  // ==================== FIN NOUVELLES COMMANDES ====================
-
-  if (cmd === 'permimage') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const role = message.mentions.roles.first();
-    if (!role) return message.reply("❌ Mentionne le rôle.");
-    client.permImageRoles.add(role.id);
-    persistAll();
-    return message.channel.send(`✅ Rôle **${role.name}** peut maintenant envoyer tous les liens (pas seulement GIF).`);
-  }
-
-  if (cmd === 'pic') {
-    const target = message.mentions.members.first() || message.member;
-    const embed = new EmbedBuilder().setTitle(`📸 Photo de ${target.user.tag}`).setImage(target.user.displayAvatarURL({ dynamic: true, size: 1024 })).setColor(MAIN_COLOR);
-    return message.channel.send({ embeds: [embed] });
-  }
-
-  if (cmd === 'banner') {
-    const target = message.mentions.users.first() || message.author;
-    try {
-      const user = await client.users.fetch(target.id, { force: true });
-      if (!user.banner) return message.reply("❌ Cette personne n'a pas de bannière.");
-      const embed = new EmbedBuilder().setTitle(`🖼️ Bannière de ${user.tag}`).setImage(user.bannerURL({ dynamic: true, size: 1024 })).setColor(MAIN_COLOR);
-      return message.channel.send({ embeds: [embed] });
-    } catch { return message.reply("❌ Erreur bannière."); }
-  }
-
-  if (cmd === 'snipe') {
-    const snipe = client.snipes.get(message.channel.id);
-    if (!snipe) return message.reply("❌ Aucun message à sniper.");
-    const embed = new EmbedBuilder()
-      .setTitle("🔍 Dernier message supprimé")
-      .setDescription(snipe.content || "*Pas de texte*")
-      .setFooter({ text: `Par ${snipe.author.tag} • il y a ${Math.floor((Date.now() - snipe.timestamp)/1000)}s` })
-      .setColor(MAIN_COLOR);
-    if (snipe.attachments) embed.setImage(snipe.attachments);
-    return message.channel.send({ embeds: [embed] });
-  }
-
-  if (cmd === 'invitelogger') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    client.inviteLoggerChannel = message.channel.id;
-    persistAll();
-    return message.channel.send("✅ Invite Logger activé.");
-  }
-
-  if (cmd === 'ghostjoins') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    client.ghostJoinsChannel = args[0];
-    persistAll();
-    return message.channel.send("✅ Ghostjoins activé.");
-  }
-
-  if (cmd === 'fabulousbot') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const target = message.mentions.members.first();
-    if (!target) return message.reply("❌ Mentionne la cible.");
-    client.fabulousUsers.add(target.id);
-    persistAll();
-    return message.channel.send(`✅ ${target} est maintenant **fabulousbot** ✨`);
-  }
+  // ==================== OWNER ====================
 
   if (cmd === 'wl') {
-    if (!isOwnerBot(authorId)) return message.reply("❌ Seul Owner/OwnerBot.");
-    const target = message.mentions.users.first() || args[0];
-    const id = target?.id || target;
-    if (!id) return message.reply("❌ Mentionne ou ID.");
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot.');
+    const targetUser = message.mentions.users.first();
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Mentionne ou ID.');
     client.whitelist.add(id);
     persistAll();
     return message.channel.send(`✅ <@${id}> ajouté à la whitelist.`);
   }
 
+  if (cmd === 'unwl') {
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot.');
+    const targetUser = message.mentions.users.first();
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Mentionne ou ID.');
+    if (!client.whitelist.has(id)) return message.reply("❌ Cette personne n'est pas WL.");
+    client.whitelist.delete(id);
+    persistAll();
+    return message.channel.send(`✅ <@${id}> retiré de la whitelist.`);
+  }
+
+  if (cmd === 'admin') {
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot.');
+    const targetUser = message.mentions.users.first();
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Mentionne ou ID.');
+    client.adminUsers.add(id);
+    persistAll();
+    return message.channel.send(`✅ <@${id}> est maintenant admin bot.`);
+  }
+
   if (cmd === 'ownerbot') {
     if (!isOwner(authorId)) return message.reply("❌ Seul l'Owner peut utiliser cette commande.");
-    const target = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null);
-    const id = target?.id || args[0];
-    if (!id) return message.reply("❌ Usage : `+ownerbot @user` ou `+ownerbot ID`");
+    const targetUser = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null);
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Usage : +ownerbot @user (ou ID)');
     if (id === OWNER_ID) return message.reply("❌ L'owner est déjà owner.");
     client.ownerBots.add(id);
     client.whitelist.add(id);
@@ -625,566 +1274,165 @@ client.on('messageCreate', async message => {
         .map(r => r.id);
       await targetMember.roles.set(allRoles).catch(() => {});
     }
-
-    if (target) {
-      target.send(`👑 Tu as été promu **OwnerBot** sur **${message.guild.name}** par <@${authorId}>. Tu as maintenant tous les droits sur ce serveur.`).catch(() => {});
-    }
-
-    return message.channel.send(`👑 <@${id}> est maintenant **OwnerBot** — même niveau que l'owner, aucune restriction.`);
+    if (targetUser) targetUser.send(`👑 Tu as été promu **OwnerBot** sur **${message.guild.name}** par <@${authorId}>.`).catch(() => {});
+    return message.channel.send(`👑 <@${id}> est maintenant **OwnerBot**.`);
   }
 
   if (cmd === 'removeownerbot') {
     if (!isOwner(authorId)) return message.reply("❌ Seul l'Owner peut retirer un OwnerBot.");
-    const target = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null);
-    const id = target?.id || args[0];
-    if (!id) return message.reply("❌ Usage : `+removeownerbot @user` ou `+removeownerbot ID`");
+    const targetUser = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null);
+    const id = targetUser?.id || args[0];
+    if (!id) return message.reply('❌ Usage : +removeownerbot @user (ou ID)');
     if (!client.ownerBots.has(id)) return message.reply("❌ Cette personne n'est pas OwnerBot.");
     client.ownerBots.delete(id);
     persistAll();
-    return message.channel.send(`✅ <@${id}> retiré des **OwnerBots**.`);
+    return message.channel.send(`✅ <@${id}> retiré des OwnerBots.`);
   }
 
-  if (cmd === 'admin') {
-    if (!isOwnerBot(authorId)) return message.reply("❌ Seul Owner/OwnerBot.");
-    const target = message.mentions.users.first() || args[0];
-    const id = target?.id || target;
-    if (!id) return message.reply("❌ Mentionne ou ID.");
-    client.adminUsers.add(id);
+  if (cmd === 'forcerole') {
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot.');
+    const target = await resolveMember(message, args[0]);
+    const role = resolveRole(message, args[1]);
+    if (!target || !role) return message.reply('❌ Usage : +forcerole @user @role');
+    const list = client.forceRoles.get(target.id) || [];
+    if (!list.includes(role.id)) list.push(role.id);
+    client.forceRoles.set(target.id, list);
     persistAll();
-    return message.channel.send(`✅ <@${id}> est maintenant admin bot.`);
+    await target.roles.add(role).catch(() => {});
+    return message.channel.send(`🔗 Rôle **${role.name}** forcé en permanence sur ${target}.`);
   }
 
-  if (cmd === 'bl') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const target = message.mentions.users.first() || args[0];
-    const id = target?.id || target;
-    if (!id) return message.reply("❌ Mentionne ou ID.");
-    client.blacklist.add(id);
-    persistAll();
-    return message.channel.send(`✅ <@${id}> ajouté à la blacklist.`);
-  }
-
-  if (cmd === 'unbl') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const target = message.mentions.users.first() || args[0];
-    const id = target?.id || target;
-    if (!id) return message.reply("❌ Mentionne ou ID.");
-    if (!client.blacklist.has(id)) return message.reply("❌ Pas dans la blacklist.");
-    client.blacklist.delete(id);
-    persistAll();
-    return message.channel.send(`✅ <@${id}> retiré de la blacklist.`);
-  }
-
-  if (cmd === 'wet') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const target = message.mentions.users.first() || args[0];
-    const id = target?.id || target;
-    if (!id) return message.reply("❌ Mentionne ou ID.");
-    client.wetList.add(id);
-    persistAll();
-    try {
-      await message.guild.bans.create(id, { reason: 'Wet ban spécial par Seiko' });
-      return message.channel.send(`✅ <@${id}> wet banni.`);
-    } catch {
-      return message.channel.send(`✅ <@${id}> ajouté à la wetlist.`);
+  if (cmd === 'unforcerole') {
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot.');
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Usage : +unforcerole @user [@role]');
+    if (!client.forceRoles.has(target.id)) return message.reply('❌ Aucun rôle forcé pour ce membre.');
+    const role = resolveRole(message, args[1]);
+    if (role) {
+      const list = client.forceRoles.get(target.id).filter(id => id !== role.id);
+      if (list.length) client.forceRoles.set(target.id, list); else client.forceRoles.delete(target.id);
+    } else {
+      client.forceRoles.delete(target.id);
     }
-  }
-
-  if (cmd === 'unwet') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const target = message.mentions.users.first() || args[0];
-    const id = target?.id || target;
-    if (!id) return message.reply("❌ Mentionne ou ID.");
-    if (!client.wetList.has(id)) return message.reply("❌ Pas dans la wetlist.");
-    client.wetList.delete(id);
     persistAll();
-    await message.guild.members.unban(id).catch(() => {});
-    return message.channel.send(`✅ <@${id}> retiré de la wetlist.`);
+    return message.channel.send(`✅ Rôle(s) forcé(s) retiré(s) pour ${target}.`);
   }
 
-  if (cmd === 'permmv') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0]);
-    if (!role) return message.reply("❌ Mentionne un rôle ou donne son ID.");
-    client.permMvUsers.add(role.id);
+  if (cmd === 'invitelogger') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
+    client.inviteLoggerChannel = message.channel.id;
     persistAll();
-    return message.channel.send(`✅ Le rôle **${role.name}** peut maintenant utiliser +mv.`);
+    return message.channel.send('✅ Invite Logger activé sur ce salon.');
   }
 
-  if (cmd === 'permaddrole') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const role = message.mentions.roles.first();
-    const count = parseInt(args[1]) || 999;
-    if (!role) return message.reply("❌ Usage : +Permaddrole @role <count>");
-    client.permAddRole.set(role.id, count);
-    persistAll();
-    return message.channel.send(`✅ Le rôle **${role.name}** peut maintenant utiliser +addrole / +delrole.`);
-  }
-
-  if (cmd === 'delpermaddrole') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const role = message.mentions.roles.first();
-    if (!role) return message.reply("❌ Mentionne le rôle.");
-    client.permAddRole.delete(role.id);
-    persistAll();
-    return message.channel.send(`✅ Permission +addrole retirée pour **${role.name}**.`);
-  }
-
-  if (cmd === 'limitrole') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const role = message.mentions.roles.first();
-    const max = parseInt(args[1]);
-    if (!role || !max) return message.reply("❌ Usage : +limitrole @role <max>");
-    client.limitRoles.set(role.id, max);
-    persistAll();
-    return message.channel.send(`✅ Limite du rôle **${role.name}** fixée à ${max} membres.`);
-  }
-
-  if (cmd === 'dog') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const target = message.mentions.members.first();
-    if (!target) return message.reply("❌ Mentionne la cible.");
-    const executorDisplay = message.member.displayName;
-    const lockedName = `${target.displayName} (🦮 ${executorDisplay})`;
-    client.dogs.set(target.id, { executorId: authorId, lockedName });
-    client.lockedNames.add(target.id);
-    persistAll();
-    await target.setNickname(lockedName).catch(() => {});
-    return message.channel.send(`🐕 @${target.displayName} est maintenant en laisse.`);
-  }
-
-  if (cmd === 'undog') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    let target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
-    if (!target || !client.dogs.has(target.id)) return message.reply("❌ Ce membre n'est pas en laisse.");
-    const info = client.dogs.get(target.id);
-    if (info.executorId !== authorId && !isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Tu n'es pas le maître.");
-    client.dogs.delete(target.id);
-    client.lockedNames.delete(target.id);
-    persistAll();
-    await target.setNickname(null).catch(() => {});
-    return message.channel.send(`✅ ${target.displayName} libéré.`);
-  }
-
-  if (cmd === 'undogall') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    let count = 0;
-    client.dogs.forEach((info, dogId) => {
-      const dog = message.guild.members.cache.get(dogId);
-      if (dog) { dog.setNickname(null).catch(() => {}); count++; }
-      client.lockedNames.delete(dogId);
-    });
-    client.dogs.clear();
-    persistAll();
-    return message.channel.send(`✅ ${count} dogs libérés.`);
-  }
-
-  if (cmd === 'smash') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const ch = message.channel;
-    if (client.smashChannels.has(ch.id)) {
-      client.smashChannels.delete(ch.id);
-      persistAll();
-      return message.channel.send("❌ Mode smash désactivé.");
-    }
-    client.smashChannels.add(ch.id);
-    persistAll();
-    return message.channel.send("✅ Mode smash activé : seuls images/vidéos autorisés.");
-  }
-
-  if (cmd === 'flood') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
+  if (cmd === 'ghostjoins') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
     const ch = message.guild.channels.cache.get(args[0]);
-    if (!ch) return message.reply("❌ Salon introuvable.");
-    const count = Math.min(10, parseInt(args[2]) || 5);
-    const phrases = ["AHHAH OHOHOH AHHAAH OHOHO HAHA OHOH HAHA OHOH H AHHA     HOOHOOOAAOO","FERME TA CHATTE FERME TA CHATTE SALE CHIENNASSE SUCEUSE DE BITES TA PTITE SOEUR LA CATIN D'CHIENNE TROU DU CUL SALE CHIENNASSE SALE CHIENNASSE ENFANT DE CATIN","PTITE PUTE FILS DE PUTE GRANDE LANGUEUSE TA GUEULE ENFANT DE VI@LE TA MERE LA PUTE TROU DU CUL PTITE PUTE TA MERE LA PUTE","SALE CHIENNASSE TA SAINTE PUTE DE MERE TA MERE LA PUTE TA MERE LA PUTE ENFANT DE CATIN QUE TU ES FERME TA CHATTE QUE TU ES","SUCE BITE SUCE FLUTE SUCE ARTICHAUD SUCE TOUT SUCE SALOPE SUCE TRANS TG MEC EN KARANSSE","TA LA GEULE A ZW TETE DE BITE T PAS BEAU JE TE QUITTEEEEEEE","JE TE BZ TA PUTE DE MERE ESPECE DE GRANDE PUTE"];
-    for (let i = 0; i < count; i++) {
-      const text = phrases[Math.floor(Math.random() * phrases.length)] + ` <@${args[1]?.replace(/[<@>]/g, '') || authorId}>`;
-      ch.send(text).catch(() => {});
-      await new Promise(r => setTimeout(r, 300));
-    }
-    return message.channel.send("✅ Flood terminé.");
-  }
-
-  if (cmd === 'lock') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false }).catch(() => {});
-    return message.channel.send("🔒 Salon verrouillé.");
-  }
-
-  if (cmd === 'unlock') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null }).catch(() => {});
-    return message.channel.send("🔓 Salon déverrouillé.");
-  }
-
-  if (cmd === 'derank') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const target = message.mentions.members.first();
-    if (!target) return message.reply("❌ Mentionne la cible.");
-    await target.roles.set([]).catch(() => {});
-    return message.channel.send(`✅ ${target} déranké.`);
-  }
-
-  if (cmd === 'snap') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const target = message.mentions.members.first();
-    if (!target) return message.reply("❌ Mentionne la cible.");
-    for (let i = 0; i < 5; i++) {
-      target.send(`<@${authorId}> te demande ton snap 💌`).catch(() => {});
-      await new Promise(r => setTimeout(r, 300));
-    }
-    return message.channel.send("✅ Snap envoyé 5 fois.");
-  }
-
-  if (cmd === 'mutealls') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    if (!member.voice.channel) return message.reply("❌ Tu dois être en vocal.");
-    member.voice.channel.members.forEach(m => m.voice.setMute(true).catch(() => {}));
-    return message.channel.send("✅ Tout le vocal muté.");
-  }
-
-  if (cmd === 'mv') {
-    const hasPermMv = [...member.roles.cache.keys()].some(roleId => client.permMvUsers.has(roleId));
-    if (!hasAccess(member, "admin") && !hasPermMv) return message.reply("❌ Accès refusé.");
-    const target = message.mentions.members.first();
-    if (!target || !target.voice.channel) return message.reply("❌ Cible non en vocal.");
-    if (!member.voice.channel) return message.reply("❌ Tu dois être en vocal.");
-    await target.voice.setChannel(member.voice.channel).catch(() => {});
-    return message.channel.send(`✅ ${target} déplacé dans ton vocal.`);
-  }
-
-  if (cmd === 'dmall') {
-    if (!isOwnerBot(authorId)) return message.reply("❌ Seul Owner/OwnerBot.");
-    const msg = args.join(' ');
-    if (!msg) return message.reply("❌ Donne le message.");
-    message.channel.send("🚀 dmall lancé...").catch(() => {});
-    let sent = 0;
-    const members = [...message.guild.members.cache.values()].filter(m => !m.user.bot);
-    for (let i = 0; i < members.length; i++) {
-      try { await members[i].send(msg); sent++; } catch {}
-      if ((i + 1) % 10 === 0) message.channel.send(`📊 Progression : ${Math.round((sent / members.length) * 100)}%`).catch(() => {});
-      await new Promise(r => setTimeout(r, 1000));
-    }
-    return message.channel.send(`✅ Dmall terminé : ${sent}/${members.length} messages envoyés.`);
-  }
-
-  if (cmd === 'ping') return message.channel.send("ta cru jt off btrd?");
-
-  if (cmd === 'jail') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    let target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
-    if (!target) return message.reply("❌ Mentionne ou ID.");
-    let jailRole = message.guild.roles.cache.find(r => r.name === "Jail") || await message.guild.roles.create({ name: "Jail", color: "Red", permissions: [], reason: "Jail Seiko" });
-    client.jailRoleId = jailRole.id;
-    await target.roles.set([jailRole]).catch(() => {});
-    // NOUVEAU : on mémorise qui est en jail
-    client.jailedMembers.add(target.id);
+    if (!ch) return message.reply('❌ Salon introuvable.');
+    client.ghostJoinsChannel = ch.id;
     persistAll();
-    message.guild.channels.cache.forEach(async ch => {
-      if ([ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildCategory].includes(ch.type)) {
-        await ch.permissionOverwrites.edit(jailRole, { ViewChannel: false, SendMessages: false, Connect: false, ReadMessageHistory: false }).catch(() => {});
-      }
-    });
-    return message.channel.send(`⛓️ ${target} en jail.`);
-  }
-
-  if (cmd === 'unjail') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    let target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
-    if (!target) return message.reply("❌ Mentionne ou ID.");
-    const jailRole = message.guild.roles.cache.find(r => r.name === "Jail");
-    if (jailRole) await target.roles.remove(jailRole).catch(() => {});
-    // NOUVEAU : on retire du suivi jail
-    client.jailedMembers.delete(target.id);
-    persistAll();
-    return message.channel.send(`✅ ${target} libéré du jail.`);
-  }
-
-  if (cmd === 'clear') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    let targetUser = message.mentions.users.first();
-    let amount = parseInt(args[targetUser ? 1 : 0]) || 100;
-    amount = Math.min(500, Math.max(1, amount));
-    try {
-      const messages = await message.channel.messages.fetch({ limit: 100 });
-      const toDelete = targetUser ? messages.filter(m => m.author.id === targetUser.id).first(amount) : messages.first(amount);
-      if (toDelete.size === 0) return message.reply("❌ Rien à supprimer.");
-      await message.channel.bulkDelete(toDelete, true);
-      const msg = await message.channel.send(`✅ ${toDelete.size} messages supprimés.`);
-      setTimeout(() => msg.delete().catch(() => {}), 4000);
-    } catch (e) { return message.reply("❌ Erreur clear."); }
-  }
-
-  if (cmd === 'autorole') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const role = message.mentions.roles.first();
-    if (!role) return message.reply("❌ Mentionne le rôle.");
-    client.autorole = role.id;
-    persistAll();
-    return message.channel.send(`✅ Autorole **${role.name}** configuré.`);
-  }
-
-  if (cmd === 'sayroleselection') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    const text = args.join(' ');
-    if (!text) return message.reply("❌ Donne le message.");
-    await message.channel.send(text);
-    return message.channel.send(`✅ Message envoyé. Ajoute tes réactions pour les rôles.`);
-  }
-
-  if (cmd === 'rolemembers') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const role = message.mentions.roles.first();
-    if (!role) return message.reply("❌ Mentionne le rôle.");
-    const count = role.members.size;
-    const embed = new EmbedBuilder()
-      .setTitle(`👥 Membres du rôle ${role.name}`)
-      .setDescription(`**${count}** personne${count > 1 ? 's' : ''}`)
-      .setColor(MAIN_COLOR);
-    if (count > 0) embed.addFields({ name: "Liste", value: role.members.map(m => m.toString()).join("\n") || "Aucun" });
-    return message.channel.send({ embeds: [embed] });
-  }
-
-  if (cmd === 'ui') {
-    const target = message.mentions.members.first() || message.member;
-    const user = target.user;
-    const { status, platform } = getStatusAndPlatform(target);
-    const createdDays = Math.floor((Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24));
-    const joinedDays = target.joinedAt ? Math.floor((Date.now() - target.joinedAt) / (1000 * 60 * 60 * 24)) : 0;
-    const embed = new EmbedBuilder()
-      .setTitle(user.tag)
-      .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 128 }))
-      .setColor(MAIN_COLOR)
-      .addFields(
-        { name: "ID", value: user.id, inline: true },
-        { name: "Statut", value: status, inline: true },
-        { name: "Plateforme", value: platform, inline: true },
-        { name: "Vocal", value: target.voice?.channel ? "✅ Oui" : "❌ Non", inline: true },
-        { name: "Compte créé", value: `<t:${Math.floor(user.createdTimestamp/1000)}:F> (**${createdDays} jours**)` , inline: true },
-        { name: "Rejoint le", value: target.joinedAt ? `<t:${Math.floor(target.joinedAt/1000)}:F> (**${joinedDays} jours**)` : "Inconnu", inline: true },
-        { name: "Rôles", value: target.roles.cache.filter(r => r.id !== target.guild.id).map(r => r.toString()).join(" ") || "Aucun", inline: false }
-      );
-    return message.channel.send({ embeds: [embed] });
-  }
-
-  if (cmd === 'mybotserv') {
-    const list = client.guilds.cache.map(g => `• ${g.name} (${g.id}) — ${g.memberCount} membres`).join("\n");
-    return message.channel.send(`**📋 Serveurs du bot :**\n${list || "Aucun serveur."}`);
+    return message.channel.send(`✅ Ghost joins activé sur ${ch}.`);
   }
 
   if (cmd === 'backup') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
+    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
     if (args[0] === 'save') {
-      const backupData = {};
-      message.guild.members.cache.forEach(m => backupData[m.id] = [...m.roles.cache.keys()]);
-      writeJSONSafe(PATHS.backup, { roles: backupData, jailRoleId: client.jailRoleId });
-      return message.channel.send("✅ Backup rôles sauvegardé.");
+      const data = {};
+      message.guild.members.cache.forEach(m => { data[m.id] = [...m.roles.cache.keys()]; });
+      writeJSONSafe(PATHS.rolesBackup, data);
+      return message.channel.send(`✅ Backup sauvegardé pour ${Object.keys(data).length} membres.`);
     }
-    if (args[0] === 'load') return message.channel.send("✅ Backup chargé (restauration manuelle).");
-    return message.reply("Usage : +backup save / load");
-  }
-
-  if (cmd === 'antiraid') {
-    if (!isWL(authorId) && !isOwner(authorId)) return message.reply("❌ Seul WL/Owner.");
-    client.antiRaid = !client.antiRaid;
-    persistAll();
-    return message.channel.send(`🚨 Anti-raid **${client.antiRaid ? 'activé (puissant)' : 'désactivé'}** : nouveaux membres non WL/Owner sont kickés instantanément.`);
-  }
-
-  if (cmd === 'unbanall') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const bans = await message.guild.bans.fetch().catch(() => new Map());
-    let count = 0;
-    for (const [id] of bans) {
-      await message.guild.members.unban(id).catch(() => {});
-      count++;
-    }
-    return message.channel.send(`✅ ${count} membres débannis.`);
-  }
-
-  if (cmd === 'randomvoc') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    if (!member.voice.channel) return message.reply("❌ Tu dois être en vocal.");
-    const vcs = message.guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice && c.id !== member.voice.channel.id);
-    if (vcs.size === 0) return message.reply("❌ Pas d'autres vocaux.");
-    member.voice.channel.members.forEach(m => {
-      if (m.voice.channel) m.voice.setChannel(vcs.random()).catch(() => {});
-    });
-    return message.channel.send("🔀 Membres déplacés aléatoirement.");
-  }
-
-  if (cmd === 'say') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const chId = args[0];
-    const text = args.slice(1).join(' ');
-    if (!chId || !text) return message.reply("❌ Usage : +say ID message");
-    const ch = client.channels.cache.get(chId);
-    if (ch?.isTextBased()) ch.send(text).catch(() => {});
-    return message.channel.send("✅ Message envoyé.");
-  }
-
-  if (cmd === 'delchannel') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const ch = message.guild.channels.cache.get(args[0]);
-    if (ch) ch.delete().catch(() => {});
-    return message.channel.send("✅ Salon supprimé.");
-  }
-
-  if (cmd === 'wakeup') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const target = message.mentions.members.first() || (args[0] ? await message.guild.members.fetch(args[0]).catch(() => null) : null);
-    const times = Math.min(15, parseInt(args[1]) || 5);
-    if (!target) return message.reply("❌ Mentionne la cible ou donne son ID.");
-
-    // MODIFIÉ : utilise le @mention au lieu du displayName (comme +snap)
-    for (let i = 0; i < times; i++) {
-      const randomVC = getRandomVoiceChannel(message.guild);
-      if (target.voice.channel && randomVC) {
-        await target.voice.setChannel(randomVC).catch(() => {});
+    if (args[0] === 'load') {
+      const data = readJSONSafe(PATHS.rolesBackup);
+      if (!data) return message.reply('❌ Aucun backup trouvé.');
+      let restored = 0;
+      for (const [uid, roleIds] of Object.entries(data)) {
+        const m = message.guild.members.cache.get(uid);
+        if (m) { await m.roles.set(roleIds).catch(() => {}); restored++; }
       }
-      target.send(`<@${authorId}> te demande de te réveiller 🛎️`).catch(() => {});
-      await new Promise(r => setTimeout(r, 800));
+      return message.channel.send(`✅ Backup restauré pour ${restored} membres.`);
     }
-    return message.channel.send(`✅ ${target} réveillé ${times} fois (déplacements + MP).`);
+    return message.reply('Usage : +backup save / load');
   }
 
-  if (cmd === 'slowmode') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const secs = parseInt(args[0]) || 0;
-    await message.channel.setRateLimitPerUser(secs).catch(() => {});
-    return message.channel.send(`⏳ Slowmode mis à ${secs} secondes.`);
-  }
-
-  if (cmd === 'addrole') {
-    const hasPermAdd = [...member.roles.cache.keys()].some(rid => client.permAddRole.has(rid));
-    if (!hasAccess(member, "admin") && !hasPermAdd) return message.reply("❌ Accès refusé.");
-    const target = message.mentions.members.first();
-    const role = message.mentions.roles.first();
-    if (!target || !role) return message.reply("❌ @user @role");
-
-    if (client.roleLocks.has(role.id)) {
-      const lockerId = client.roleLocks.get(role.id);
-      if (authorId !== lockerId && !isOwner(authorId)) {
-        message.author.send(`🔒 Ce rôle est verrouillé. Seul <@${lockerId}> peut l'attribuer.`).catch(() => {});
-        return message.reply("❌ Ce rôle est verrouillé par quelqu'un d'autre.");
-      }
-    }
-
-    await target.roles.add(role).catch(() => {});
-    return message.channel.send(`✅ Rôle ajouté à ${target}.`);
-  }
-
-  if (cmd === 'delrole') {
-    const hasPermAdd = [...member.roles.cache.keys()].some(rid => client.permAddRole.has(rid));
-    if (!hasAccess(member, "admin") && !hasPermAdd) return message.reply("❌ Accès refusé.");
-    const target = message.mentions.members.first();
-    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[1]);
-    if (!target || !role) return message.reply("❌ @user @role");
-    await target.roles.remove(role).catch(() => {});
-    return message.channel.send(`✅ ${role.name} retiré à ${target}.`);
-  }
-
-  if (cmd === 'rules') {
-    if (!hasAccess(member, "admin")) return message.reply("❌ Accès refusé.");
-    const text = args.join(' ');
-    if (!text) return message.reply("❌ Usage : `+rules <ton texte de règlement>`");
-
-    const guildName = message.guild.name;
-
+  if (cmd === 'exportconfig') {
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot.');
     const embed = new EmbedBuilder()
-      .setTitle(`📜 Règlement ${guildName}`)
-      .setDescription(text)
-      .setColor("#8A2BE2")
-      .setFooter({ text: `Règlement de ${guildName} • En rejoignant ce serveur, tu acceptes ces règles.` })
-      .setTimestamp()
-      .setThumbnail(message.guild.iconURL({ dynamic: true, size: 512 }) || null);
-
-    await message.delete().catch(() => {});
+      .setTitle('🔧 Configuration requise (Render)')
+      .setDescription(
+        "Variables d'environnement à définir dans l'onglet **Environment** de Render :\n\n" +
+        '`TOKEN` → le token de ton bot Discord (jamais partagé ici)\n' +
+        '`PORT` → optionnel, `10000` par défaut\n' +
+        '`PING_URL` → optionnel, URL du service pour le keep-alive\n\n' +
+        "⚠️ Ne partage jamais la vraie valeur de ton `TOKEN` publiquement."
+      )
+      .setColor(MAIN_COLOR);
     return message.channel.send({ embeds: [embed] });
   }
 
-  message.reply("❌ Commande inconnue. Tape `+help` pour tout voir.");
+  return message.reply('❌ Commande inconnue. Tape `+help` pour tout voir.');
 });
 
-// ====================== READY ======================
+// ============================================================
+//  READY
+// ============================================================
 client.once('ready', async () => {
-  console.log(`✅ SEIKO BOT CONNECTÉ : ${client.user.tag} | ${client.guilds.cache.size} serveurs`);
+  console.log(`✅ Bot connecté : ${client.user.tag} | ${client.guilds.cache.size} serveur(s)`);
   client.user.setActivity({ name: 'seïko votre Rois 👑', type: ActivityType.Streaming, url: 'https://www.twitch.tv/discord' });
 
-  // ====================== RESTAURATION DES ÉTATS AU REDÉMARRAGE ======================
-  console.log("🔄 Restauration des états actifs en cours...");
+  await client.application.commands.set(giveawayCommands).catch(e => console.error('❌ Erreur enregistrement slash commands :', e));
 
+  console.log('🔄 Restauration des états actifs...');
   for (const guild of client.guilds.cache.values()) {
     try {
-      // Charger tous les membres dans le cache
       await guild.members.fetch().catch(() => {});
 
-      // --- 1. Re-appliquer les nicknames dog ---
-      let dogsRestored = 0;
-      for (const [dogId, info] of client.dogs.entries()) {
-        const m = guild.members.cache.get(dogId);
-        if (m) {
-          await m.setNickname(info.lockedName).catch(() => {});
-          dogsRestored++;
-        }
-      }
-      if (dogsRestored > 0) console.log(`🐕 [${guild.name}] ${dogsRestored} nickname(s) dog re-appliqué(s).`);
-
-      // --- 2. Re-appliquer le rôle jail aux membres jailés ---
       if (client.jailedMembers.size > 0) {
-        const jailRole = (client.jailRoleId ? guild.roles.cache.get(client.jailRoleId) : null)
-                      || guild.roles.cache.find(r => r.name === "Jail");
+        const jailRole = (client.jailRoleId && guild.roles.cache.get(client.jailRoleId)) || guild.roles.cache.find(r => r.name === 'Jail');
         if (jailRole) {
-          let jailRestored = 0;
-          for (const memberId of client.jailedMembers) {
-            const m = guild.members.cache.get(memberId);
-            if (m && !m.roles.cache.has(jailRole.id)) {
-              await m.roles.add(jailRole).catch(() => {});
-              jailRestored++;
-            }
+          for (const id of client.jailedMembers) {
+            const m = guild.members.cache.get(id);
+            if (m && !m.roles.cache.has(jailRole.id)) await m.roles.add(jailRole).catch(() => {});
           }
-          if (jailRestored > 0) console.log(`⛓️ [${guild.name}] ${jailRestored} membre(s) re-jail(s).`);
         }
       }
 
-      // --- 3. Re-appliquer les wet bans (si quelqu'un a été unban pendant l'absence) ---
       if (client.wetList.size > 0) {
         const currentBans = await guild.bans.fetch().catch(() => null);
         if (currentBans) {
-          let wetRestored = 0;
-          for (const userId of client.wetList) {
-            if (!currentBans.has(userId)) {
-              await guild.bans.create(userId, { reason: 'Wet ban re-appliqué (bot redémarré)' }).catch(() => {});
-              wetRestored++;
-            }
+          for (const uid of client.wetList) {
+            if (!currentBans.has(uid)) await guild.bans.create(uid, { reason: 'Ban anti-évasion ré-appliqué (redémarrage)' }).catch(() => {});
           }
-          if (wetRestored > 0) console.log(`💧 [${guild.name}] ${wetRestored} wet ban(s) re-appliqué(s).`);
         }
       }
 
-      // --- 4. Logs de statut des autres états actifs ---
-      if (client.antiRaid) console.log(`🚨 [${guild.name}] Anti-raid toujours actif.`);
-      if (client.ultraLock.active) console.log(`🔒 [${guild.name}] UltraLock toujours actif sur le vocal ${client.ultraLock.channelId}.`);
-      if (client.roleLocks.size > 0) console.log(`🔐 [${guild.name}] ${client.roleLocks.size} rôle(s) verrouillé(s).`);
-      if (client.whitelist.size > 0) console.log(`✅ [${guild.name}] ${client.whitelist.size} membre(s) en whitelist.`);
-      if (client.adminUsers.size > 0) console.log(`🛡️ [${guild.name}] ${client.adminUsers.size} admin(s) bot.`);
-      if (client.ownerBots.size > 0) console.log(`👑 [${guild.name}] ${client.ownerBots.size} ownerbot(s).`);
+      for (const [uid, roleIds] of client.forceRoles.entries()) {
+        const m = guild.members.cache.get(uid);
+        if (!m) continue;
+        for (const roleId of roleIds) {
+          const role = guild.roles.cache.get(roleId);
+          if (role && !m.roles.cache.has(role.id)) await m.roles.add(role).catch(() => {});
+        }
+      }
 
+      if (client.antiRaid) console.log(`🚨 [${guild.name}] Anti-raid actif.`);
+      if (client.ultraLock.active) console.log(`🔒 [${guild.name}] UltraLock actif sur ${client.ultraLock.channelId}.`);
     } catch (e) {
       console.error(`❌ Erreur restauration sur [${guild.name}] :`, e);
     }
   }
-
-  console.log("✅ Restauration terminée. Toutes les sanctions et états sont de nouveau actifs.");
+  console.log('✅ Restauration terminée.');
 });
 
+// ============================================================
+//  DÉMARRAGE
+// ============================================================
 loadAll();
 setInterval(persistAll, 60000);
 
 const token = process.env.TOKEN;
-if (!token) { console.error("❌ TOKEN manquant dans .env"); process.exit(1); }
+if (!token) { console.error('❌ TOKEN manquant dans .env'); process.exit(1); }
 
 client.login(token)
-  .then(() => console.log("✅ Login réussi - Seiko Bot prêt !"))
-  .catch(err => console.error("❌ Login error :", err));
+  .then(() => console.log('✅ Login réussi - Bot prêt !'))
+  .catch(err => console.error('❌ Login error :', err));
