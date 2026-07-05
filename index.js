@@ -1378,7 +1378,7 @@ client.on('messageCreate', async message => {
 // ============================================================
 client.once('ready', async () => {
   console.log(`✅ Bot connecté : ${client.user.tag} | ${client.guilds.cache.size} serveur(s)`);
-  client.user.setActivity({ name: 'seïko votre Rois 👑', type: ActivityType.Streaming, url: 'https://www.twitch.tv/discord' });
+  client.user.setActivity({ name: 'ᴾⱽ Aruno on top 👑', type: ActivityType.Streaming, url: 'https://www.twitch.tv/discord' });
 
   await client.application.commands.set(giveawayCommands).catch(e => console.error('❌ Erreur enregistrement slash commands :', e));
 
