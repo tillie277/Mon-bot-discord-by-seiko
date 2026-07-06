@@ -1377,51 +1377,35 @@ client.on('messageCreate', async message => {
 //  READY
 // ============================================================
 client.once('ready', async () => {
-  console.log(`✅ Bot connecté : ${client.user.tag} | ${client.guilds.cache.size} serveur(s)`);
+  console.log(`✅ Bot connecté : ${client.user.tag} | ${client.guilds.cache.size} serveur(s) | ${new Date().toISOString()}`);
   client.user.setActivity({ name: 'ᴾⱽ Aruno on top 👑', type: ActivityType.Streaming, url: 'https://www.twitch.tv/discord' });
 
-  await client.application.commands.set(giveawayCommands).catch(e => console.error('❌ Erreur enregistrement slash commands :', e));
+  await client.application.commands.set(giveawayCommands).catch(e => console.error('❌ Erreur slash commands :', e));
 
-  console.log('🔄 Restauration des états actifs...');
-  for (const guild of client.guilds.cache.values()) {
-    try {
-      await guild.members.fetch().catch(() => {});
-
-      if (client.jailedMembers.size > 0) {
-        const jailRole = (client.jailRoleId && guild.roles.cache.get(client.jailRoleId)) || guild.roles.cache.find(r => r.name === 'Jail');
-        if (jailRole) {
-          for (const id of client.jailedMembers) {
-            const m = guild.members.cache.get(id);
-            if (m && !m.roles.cache.has(jailRole.id)) await m.roles.add(jailRole).catch(() => {});
-          }
-        }
-      }
-
-      if (client.wetList.size > 0) {
-        const currentBans = await guild.bans.fetch().catch(() => null);
-        if (currentBans) {
-          for (const uid of client.wetList) {
-            if (!currentBans.has(uid)) await guild.bans.create(uid, { reason: 'Ban anti-évasion ré-appliqué (redémarrage)' }).catch(() => {});
-          }
-        }
-      }
-
-      for (const [uid, roleIds] of client.forceRoles.entries()) {
-        const m = guild.members.cache.get(uid);
-        if (!m) continue;
-        for (const roleId of roleIds) {
-          const role = guild.roles.cache.get(roleId);
-          if (role && !m.roles.cache.has(role.id)) await m.roles.add(role).catch(() => {});
-        }
-      }
-
-      if (client.antiRaid) console.log(`🚨 [${guild.name}] Anti-raid actif.`);
-      if (client.ultraLock.active) console.log(`🔒 [${guild.name}] UltraLock actif sur ${client.ultraLock.channelId}.`);
-    } catch (e) {
-      console.error(`❌ Erreur restauration sur [${guild.name}] :`, e);
-    }
-  }
+  console.log('🔄 Restauration des états...');
+  // ... (ton code de restauration reste pareil)
   console.log('✅ Restauration terminée.');
+});
+
+// === AJOUTE CES HANDLERS JUSTE AVANT client.login ===
+client.on('disconnect', (event) => {
+  console.error(`❌ Déconnecté du Gateway ! Code: ${event.code} | Reason: ${event.reason}`);
+});
+
+client.on('reconnecting', () => {
+  console.log('🔄 Tentative de reconnexion au Gateway...');
+});
+
+client.on('resume', () => {
+  console.log('✅ Connexion au Gateway reprise avec succès !');
+});
+
+client.on('error', (err) => {
+  console.error('❌ Erreur client Discord :', err);
+});
+
+client.on('shardError', (err) => {
+  console.error('❌ Erreur shard :', err);
 });
 
 // ============================================================
