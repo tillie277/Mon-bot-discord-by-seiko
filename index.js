@@ -166,7 +166,7 @@ function persistAll() {
   writeJSONSafe(PATHS.menottes, [...client.menottes.entries()]);
   writeJSONSafe(PATHS.mediaOnly, [...client.mediaOnlyChannels]);
   writeJSONSafe(PATHS.welcomeConfig, client.welcomeConfig);
-  writeJSONSafe(PATHS.join(DATA_DIR, 'dogLocks.json'), [...client.dogLocks.entries()]);
+  writeJSONSafe(path.join(DATA_DIR, 'dogLocks.json'), [...client.dogLocks.entries()]);
 }
 
 function loadAll() {
@@ -194,8 +194,6 @@ function loadAll() {
   const mn = readJSONSafe(PATHS.menottes); if (Array.isArray(mn)) mn.forEach(([k, v]) => client.menottes.set(k, v));
   const mo = readJSONSafe(PATHS.mediaOnly); if (Array.isArray(mo)) mo.forEach(id => client.mediaOnlyChannels.add(id));
   client.welcomeConfig = readJSONSafe(PATHS.welcomeConfig) || null;
-  const dogData = readJSONSafe(path.join(DATA_DIR, 'dogLocks.json'));
-if (dogData) dogData.forEach(([k, v]) => client.dogLocks.set(k, v));
   const dogData = readJSONSafe(path.join(DATA_DIR, 'dogLocks.json'));
   if (dogData) dogData.forEach(([k, v]) => client.dogLocks.set(k, v));
 }
