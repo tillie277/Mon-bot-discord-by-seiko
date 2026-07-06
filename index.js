@@ -1657,7 +1657,6 @@ client.on('messageCreate', async message => {
       await ch.send(targetUser ? `# ${targetUser} ${phrase}` : `# ${phrase}`).catch(() => {});
       await new Promise(r => setTimeout(r, 700));
     }
-    return message.channel.send(`✅ ${count} message(s) envoyé(s) dans ${ch}.`);
   }
 
   if (cmd === 'say') {
