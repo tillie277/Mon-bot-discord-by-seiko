@@ -1423,7 +1423,28 @@ client.once('ready', async () => {
   }
   console.log('✅ Restauration terminée.');
 });
+console.log("🚀 Bot démarré sur Render - " + new Date().toISOString());
 
+client.once('ready', () => {
+    console.log(`✅ BOT EN LIGNE : ${client.user.tag} | ${client.guilds.cache.size} serveurs`);
+});
+
+client.on('disconnect', (event) => {
+    console.error("❌ Déconnecté du Gateway :", event);
+});
+
+client.on('reconnecting', () => {
+    console.log("🔄 Tentative de reconnexion...");
+});
+
+client.on('error', (err) => {
+    console.error("❌ Erreur :", err);
+});
+
+// À la fin du fichier
+client.login(process.env.DISCORD_TOKEN).catch(err => {
+    console.error("❌ ÉCHEC LOGIN :", err.message);
+});
 // ============================================================
 //  DÉMARRAGE
 // ============================================================
