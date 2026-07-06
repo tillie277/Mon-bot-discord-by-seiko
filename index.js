@@ -10,7 +10,10 @@ const {
   PermissionsBitField,
   ChannelType,
   ActivityType,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } = require('discord.js');
 
 // ============================================================
@@ -23,31 +26,24 @@ const DATA_DIR = path.resolve(__dirname, 'data');
 const GIVEAWAY_EMOJI = '🎉';
 const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // limite Discord : 28 jours
 
-// 👉 Phrases utilisées par +flood
+// 👉 Phrases utilisées par +flood — modifie cette liste comme tu veux, c'est fait pour.
 const FLOOD_PHRASES = [
-  'Viole ta salope de mère',
-  'Petite merde',
-  'Sale tocard fais toi violer sous un pont',
-  'ᴾⱽ Aruno on top 👑',
-  'Suce ma bite',
-  'Déchet humain',
-  'Insecte insignifiant',
-  'T’es répugnant',
-  'Dégage , crasseux',
-  'Fais toi poutrer par ibliss',
-  'Fils de pute',
-  'Nique ta mere la caissièré',
-  'Prends toi un doigt dans le cul t’iras mieux',
-  'Vas faire un tour dans la chatte à ta mère si j’y suis',
-  'Ton père le sioniste',
-  'Casse un tour',
-  'Ta gueule',
-  'Vas sur sweet dream espèce de honte'
-];
-
-// 👉 Phrases utilisées par +snap (petit MP taquin, pas de demande de photo)
-const SNAP_PHRASES = [
-  '@executordisplayname te demande ton snap !'
+  '🎉 Tu as gagné... rien du tout !',
+  'Cocorico 🐓',
+  'Saviez-vous que les poulpes ont trois cœurs ? 🐙',
+  'Pouet pouet 🚗',
+  'Alerte : niveau de fun détecté à 100% 📈',
+  'Un café pour la route ? ☕',
+  'Bzzzz je suis une abeille 🐝',
+  'Ceci est un message très important (ou pas)',
+  'GG WP 🎮',
+  'Chargement du fun en cours... ⏳',
+  'Bip bip 🤖',
+  'Succès débloqué : "A lu ce message" 🏆',
+  'On se calme, on respire 🧘',
+  'Petit rappel : hydrate-toi 💧',
+  'Le chat est passé par ici 🐱',
+  "Chuck Norris compte jusqu'à l'infini... deux fois",
 ];
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -67,14 +63,13 @@ const PATHS = {
   permAddRole: path.join(DATA_DIR, 'permAddRole.json'),
   permImageRoles: path.join(DATA_DIR, 'permImageRoles.json'),
   settings: path.join(DATA_DIR, 'settings.json'),
-  rolesBackup: path.join(DATA_DIR, 'rolesBackup.json'),
+  serverBackup: path.join(DATA_DIR, 'serverBackup.json'),
   autorole: path.join(DATA_DIR, 'autorole.json'),
   roleLocks: path.join(DATA_DIR, 'roleLocks.json'),
   ultraLock: path.join(DATA_DIR, 'ultraLock.json'),
   warns: path.join(DATA_DIR, 'warns.json'),
   forceRoles: path.join(DATA_DIR, 'forceRoles.json'),
   giveaways: path.join(DATA_DIR, 'giveaways.json'),
-  dogs: path.join(DATA_DIR, 'dogs.json'),
   menottes: path.join(DATA_DIR, 'menottes.json'),
   mediaOnly: path.join(DATA_DIR, 'mediaOnly.json'),
   welcomeConfig: path.join(DATA_DIR, 'welcomeConfig.json'),
@@ -123,7 +118,6 @@ client.forceRoles = new Map();      // userId -> [roleId, ...]
 client.giveaways = new Map();       // messageId -> { channelId, guildId, prize, winnersCount, endTime, hostId, ended }
 client.snipes = new Map();
 client.joinTimestamps = new Map();  // userId -> timestamp (détection ghost joins, non persistant)
-client.dogs = new Map();            // targetId -> { masterId, originalNick } (laisse)
 client.menottes = new Map();        // targetId -> channelId (salon assigné)
 client.mediaOnlyChannels = new Set(); // channelIds en mode images/vidéos uniquement (+smash)
 client.welcomeConfig = null;        // { channelId, message }
@@ -169,7 +163,6 @@ function persistAll() {
   writeJSONSafe(PATHS.warns, [...client.warns.entries()]);
   writeJSONSafe(PATHS.forceRoles, [...client.forceRoles.entries()]);
   writeJSONSafe(PATHS.giveaways, [...client.giveaways.entries()]);
-  writeJSONSafe(PATHS.dogs, [...client.dogs.entries()]);
   writeJSONSafe(PATHS.menottes, [...client.menottes.entries()]);
   writeJSONSafe(PATHS.mediaOnly, [...client.mediaOnlyChannels]);
   writeJSONSafe(PATHS.welcomeConfig, client.welcomeConfig);
@@ -197,7 +190,6 @@ function loadAll() {
   const warns = readJSONSafe(PATHS.warns); if (Array.isArray(warns)) warns.forEach(([k, v]) => client.warns.set(k, v));
   const fr = readJSONSafe(PATHS.forceRoles); if (Array.isArray(fr)) fr.forEach(([k, v]) => client.forceRoles.set(k, v));
   const gv = readJSONSafe(PATHS.giveaways); if (Array.isArray(gv)) gv.forEach(([k, v]) => client.giveaways.set(k, v));
-  const dg = readJSONSafe(PATHS.dogs); if (Array.isArray(dg)) dg.forEach(([k, v]) => client.dogs.set(k, v));
   const mn = readJSONSafe(PATHS.menottes); if (Array.isArray(mn)) mn.forEach(([k, v]) => client.menottes.set(k, v));
   const mo = readJSONSafe(PATHS.mediaOnly); if (Array.isArray(mo)) mo.forEach(id => client.mediaOnlyChannels.add(id));
   client.welcomeConfig = readJSONSafe(PATHS.welcomeConfig) || null;
@@ -221,7 +213,7 @@ const hasAccess = (member, level) => {
 };
 
 // Hiérarchie numérique : un rang ne peut pas sanctionner un rang égal ou supérieur
-// Utilisée pour +jail, +wet, +bl, +dog (un admin ne touche pas un WL, un WL ne touche pas un OwnerBot)
+// Utilisée pour +jail, +wet, +bl (un admin ne touche pas un WL, un WL ne touche pas un OwnerBot)
 function getTier(id) {
   if (isOwner(id)) return 4;
   if (client.ownerBots.has(id)) return 3;
@@ -293,6 +285,130 @@ function parseDuration(str) {
 function pickRandomWinners(pool, count) {
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, shuffled.length));
+}
+
+// 👉 Aide pour des logs plus présentables et cohérents
+function buildLogEmbed({ title, color = MAIN_COLOR, author, description, fields, thumbnail, image }) {
+  const embed = new EmbedBuilder().setColor(color).setTimestamp();
+  if (title) embed.setTitle(title);
+  if (author) embed.setAuthor(author);
+  if (description) embed.setDescription(description);
+  if (fields) embed.addFields(fields);
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  if (image) embed.setImage(image);
+  embed.setFooter({ text: 'ᴾⱽ Aruno • Système de logs' });
+  return embed;
+}
+
+// ============================================================
+//  BACKUP COMPLET DU SERVEUR (+backup save / load)
+// ============================================================
+async function backupServer(guild) {
+  const data = { savedAt: Date.now(), guildName: guild.name, roles: [], categories: [], channels: [], emojis: [], stickers: [], memberRoles: {} };
+
+  const roles = [...guild.roles.cache.values()]
+    .filter(r => r.id !== guild.id && !r.managed)
+    .sort((a, b) => a.position - b.position);
+  for (const r of roles) {
+    data.roles.push({ oldId: r.id, name: r.name, color: r.color, hoist: r.hoist, mentionable: r.mentionable, permissions: r.permissions.bitfield.toString() });
+  }
+
+  const categories = [...guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory).values()].sort((a, b) => a.position - b.position);
+  for (const cat of categories) {
+    data.categories.push({
+      oldId: cat.id, name: cat.name,
+      permissionOverwrites: [...cat.permissionOverwrites.cache.values()].map(o => ({ id: o.id, type: o.type, allow: o.allow.bitfield.toString(), deny: o.deny.bitfield.toString() })),
+    });
+  }
+
+  const channels = [...guild.channels.cache.filter(c => c.type !== ChannelType.GuildCategory).values()].sort((a, b) => a.position - b.position);
+  for (const ch of channels) {
+    data.channels.push({
+      oldId: ch.id, name: ch.name, type: ch.type, parentOldId: ch.parentId,
+      topic: ch.topic || null, nsfw: ch.nsfw || false, rateLimitPerUser: ch.rateLimitPerUser || 0,
+      bitrate: ch.bitrate, userLimit: ch.userLimit,
+      permissionOverwrites: [...ch.permissionOverwrites.cache.values()].map(o => ({ id: o.id, type: o.type, allow: o.allow.bitfield.toString(), deny: o.deny.bitfield.toString() })),
+    });
+  }
+
+  guild.emojis.cache.forEach(e => data.emojis.push({ name: e.name, url: e.imageURL(), animated: e.animated }));
+  guild.stickers.cache.forEach(s => { if (s.type === 2) data.stickers.push({ name: s.name, description: s.description || '', tags: s.tags || '', url: s.url }); });
+  guild.members.cache.forEach(m => { data.memberRoles[m.id] = [...m.roles.cache.keys()].filter(id => id !== guild.id); });
+
+  writeJSONSafe(PATHS.serverBackup, data);
+  return data;
+}
+
+async function restoreServer(guild) {
+  const data = readJSONSafe(PATHS.serverBackup);
+  if (!data) throw new Error('Aucun backup trouvé.');
+
+  const roleIdMap = new Map(); // oldId -> id actuel (recréé ou déjà existant par nom)
+
+  for (const r of data.roles) {
+    let existing = guild.roles.cache.find(role => role.name === r.name);
+    if (!existing) {
+      existing = await guild.roles.create({
+        name: r.name, color: r.color || undefined, hoist: r.hoist,
+        mentionable: r.mentionable, permissions: BigInt(r.permissions), reason: 'Restauration backup',
+      }).catch(() => null);
+    }
+    if (existing) roleIdMap.set(r.oldId, existing.id);
+  }
+
+  const remapOverwrites = (overwrites) => overwrites.map(o => {
+    // type 0 = rôle (à remapper), type 1 = membre (id inchangé)
+    const newId = o.type === 0 ? (roleIdMap.get(o.id) || (guild.roles.cache.has(o.id) ? o.id : null)) : o.id;
+    if (!newId) return null;
+    return { id: newId, type: o.type, allow: BigInt(o.allow), deny: BigInt(o.deny) };
+  }).filter(Boolean);
+
+  const categoryIdMap = new Map();
+  for (const cat of data.categories) {
+    let existing = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === cat.name);
+    if (!existing) {
+      existing = await guild.channels.create({
+        name: cat.name, type: ChannelType.GuildCategory,
+        permissionOverwrites: remapOverwrites(cat.permissionOverwrites),
+        reason: 'Restauration backup',
+      }).catch(() => null);
+    }
+    if (existing) categoryIdMap.set(cat.oldId, existing.id);
+  }
+
+  let channelsRestored = 0;
+  for (const ch of data.channels) {
+    const existing = guild.channels.cache.find(c => c.name === ch.name && c.type === ch.type);
+    if (existing) continue;
+    const parentId = ch.parentOldId ? categoryIdMap.get(ch.parentOldId) : undefined;
+    const created = await guild.channels.create({
+      name: ch.name, type: ch.type, parent: parentId,
+      topic: ch.topic || undefined, nsfw: ch.nsfw, rateLimitPerUser: ch.rateLimitPerUser,
+      bitrate: ch.bitrate || undefined, userLimit: ch.userLimit || undefined,
+      permissionOverwrites: remapOverwrites(ch.permissionOverwrites),
+      reason: 'Restauration backup',
+    }).catch(() => null);
+    if (created) channelsRestored++;
+  }
+
+  for (const e of data.emojis) {
+    if (guild.emojis.cache.some(existing => existing.name === e.name)) continue;
+    await guild.emojis.create({ attachment: e.url, name: e.name }).catch(() => {});
+  }
+  for (const s of data.stickers) {
+    if (guild.stickers.cache.some(existing => existing.name === s.name)) continue;
+    await guild.stickers.create({ file: s.url, name: s.name, description: s.description, tags: s.tags }).catch(() => {});
+  }
+
+  let membersRestored = 0;
+  for (const [uid, oldRoleIds] of Object.entries(data.memberRoles)) {
+    const m = guild.members.cache.get(uid);
+    if (!m) continue;
+    const newRoleIds = oldRoleIds.map(oldId => roleIdMap.get(oldId)).filter(Boolean);
+    if (newRoleIds.length) { await m.roles.set(newRoleIds).catch(() => {}); membersRestored++; }
+  }
+
+  return { rolesRestored: roleIdMap.size, categoriesRestored: categoryIdMap.size, channelsRestored, membersRestored };
 }
 
 // ============================================================
@@ -374,7 +490,47 @@ const giveawayCommands = [
     .setDescription('Liste les giveaways en cours'),
 ].map(c => c.toJSON());
 
+// ============================================================
+//  INTERACTIONS (slash commands giveaways + boutons +edate)
+// ============================================================
 client.on('interactionCreate', async interaction => {
+  if (interaction.isButton()) {
+    if (!interaction.customId.startsWith('edate_')) return;
+    const [, action, executorId, targetId] = interaction.customId.split('_');
+    if (interaction.user.id !== targetId) return interaction.reply({ content: '❌ Seule la personne invitée peut répondre.', ephemeral: true });
+
+    if (action === 'decline') {
+      await interaction.update({ embeds: [new EmbedBuilder().setDescription(`💔 <@${targetId}> a refusé le edate.`).setColor(MAIN_COLOR)], components: [] }).catch(() => {});
+      return;
+    }
+
+    if (action === 'accept') {
+      const guild = interaction.guild;
+      let counter = 1;
+      while (guild.channels.cache.find(c => c.name === `💕 edate ${counter}`)) counter++;
+      const vc = await guild.channels.create({
+        name: `💕 edate ${counter}`,
+        type: ChannelType.GuildVoice,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: executorId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect] },
+          { id: targetId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect] },
+        ]
+      }).catch(() => null);
+
+      if (!vc) return interaction.update({ content: '❌ Impossible de créer le salon.', embeds: [], components: [] }).catch(() => {});
+
+      const checkEmpty = setInterval(async () => {
+        const fresh = guild.channels.cache.get(vc.id);
+        if (!fresh) { clearInterval(checkEmpty); return; }
+        if (fresh.members.size === 0) { clearInterval(checkEmpty); await fresh.delete().catch(() => {}); }
+      }, 10000);
+
+      await interaction.update({ embeds: [new EmbedBuilder().setDescription(`💕 <@${targetId}> a accepté ! Salon privé créé : ${vc}`).setColor(MAIN_COLOR)], components: [] }).catch(() => {});
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
   const isAdminLevel = hasAccess(interaction.member, 'admin');
 
@@ -414,6 +570,39 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   const member = newState.member;
   if (!member || member.user.bot) return;
 
+  // ---- FabulousBot : protection contre mute / sourdine / déplacement / déconnexion faits depuis Discord ----
+  if (client.fabulousUsers.has(member.id)) {
+    let auditType = null;
+    let describe = '';
+    if (!oldState.serverMute && newState.serverMute) { auditType = 24; describe = 'mute'; }
+    else if (!oldState.serverDeaf && newState.serverDeaf) { auditType = 24; describe = 'mute casque'; }
+    else if (oldState.channelId && !newState.channelId) { auditType = 27; describe = 'déconnexion'; }
+    else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) { auditType = 26; describe = 'déplacement'; }
+
+    if (auditType) {
+      const logs = await member.guild.fetchAuditLogs({ type: auditType, limit: 5 }).catch(() => null);
+      const entry = logs?.entries?.find(e => e.target?.id === member.id && Date.now() - e.createdTimestamp < 8000);
+      const executorId = entry?.executor?.id;
+      if (executorId && executorId !== client.user.id && executorId !== member.id && !isOwnerBot(executorId)) {
+        const executorMember = await member.guild.members.fetch(executorId).catch(() => null);
+
+        if (describe === 'mute') await newState.setMute(false).catch(() => {});
+        else if (describe === 'mute casque') await newState.setDeaf(false).catch(() => {});
+        else if (describe === 'déplacement' && oldState.channel) await member.voice.setChannel(oldState.channel).catch(() => {});
+        // NB : une déconnexion ne peut pas être annulée via l'API Discord (impossible de reconnecter quelqu'un de force)
+
+        if (executorMember?.voice.channel) {
+          if (describe === 'mute') await executorMember.voice.setMute(true).catch(() => {});
+          else if (describe === 'mute casque') await executorMember.voice.setDeaf(true).catch(() => {});
+          else if (describe === 'déconnexion') await executorMember.voice.disconnect().catch(() => {});
+          else if (describe === 'déplacement' && newState.channel) await executorMember.voice.setChannel(newState.channel).catch(() => {});
+        }
+        executorMember?.send(`✨ ${member.user.tag} est protégé par FabulousBot : ton action (${describe}) se retourne contre toi !`).catch(() => {});
+        return;
+      }
+    }
+  }
+
   // Verrouillage ultra : expulse quiconque rejoint le salon verrouillé (sauf owner/ownerbot)
   if (client.ultraLock.active && client.ultraLock.channelId && newState.channelId === client.ultraLock.channelId && !isOwnerBot(member.id)) {
     await member.voice.disconnect().catch(() => {});
@@ -425,18 +614,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   if (client.menottes.has(member.id) && newState.channelId && newState.channelId !== client.menottes.get(member.id)) {
     const cell = newState.guild.channels.cache.get(client.menottes.get(member.id));
     if (cell) { await member.voice.setChannel(cell).catch(() => {}); return; }
-  }
-
-  // Laisse : le chien suit automatiquement son maître en vocal
-  if (newState.channelId && newState.channelId !== oldState.channelId) {
-    for (const [dogId, dogData] of client.dogs.entries()) {
-      if (dogData.masterId === member.id) {
-        const dogMember = newState.guild.members.cache.get(dogId);
-        if (dogMember?.voice.channel && dogMember.voice.channel.id !== newState.channelId) {
-          await dogMember.voice.setChannel(newState.channelId).catch(() => {});
-        }
-      }
-    }
   }
 });
 
@@ -455,19 +632,17 @@ client.on('messageDelete', async message => {
   const logs = await ensureLogChannels(message.guild);
   if (!logs.messages) return;
 
-  const embed = new EmbedBuilder()
-    .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-    .setTitle('🗑️ Message supprimé')
-    .setColor(MAIN_COLOR)
-    .setTimestamp()
-    .addFields(
+  const embed = buildLogEmbed({
+    title: '🗑️ Message supprimé',
+    author: { name: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) },
+    description: message.content ? `\`\`\`${message.content.slice(0, 1000)}\`\`\`` : '*Aucun texte (média uniquement)*',
+    fields: [
       { name: '👤 Auteur', value: `${message.author} (\`${message.author.id}\`)`, inline: true },
       { name: '📍 Salon', value: `${message.channel}`, inline: true },
-      { name: '🕒 Heure', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true }
-    )
-    .setFooter({ text: 'Logs de messages' });
-  if (message.content) embed.setDescription(`\`\`\`${message.content.slice(0, 1000)}\`\`\``);
-  if (message.attachments.size) embed.setImage(message.attachments.first().url);
+      { name: '🕒 Heure', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true },
+    ],
+    image: message.attachments.size ? message.attachments.first().url : null,
+  });
   logs.messages.send({ embeds: [embed] }).catch(() => {});
 });
 
@@ -507,7 +682,12 @@ client.on('guildMemberAdd', async member => {
 
   if (client.inviteLoggerChannel) {
     const logCh = member.guild.channels.cache.get(client.inviteLoggerChannel);
-    if (logCh) logCh.send({ embeds: [new EmbedBuilder().setDescription(`📥 **${member}** a rejoint le serveur.`).setColor(MAIN_COLOR).setThumbnail(member.user.displayAvatarURL({ dynamic: true })).setTimestamp()] }).catch(() => {});
+    if (logCh) logCh.send({ embeds: [buildLogEmbed({
+      title: '📥 Nouvel arrivant',
+      description: `${member} vient de rejoindre le serveur.`,
+      thumbnail: member.user.displayAvatarURL({ dynamic: true }),
+      fields: [{ name: 'Compte créé', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true }],
+    })] }).catch(() => {});
   }
 
   if (client.welcomeConfig) {
@@ -525,13 +705,12 @@ client.on('guildMemberRemove', async member => {
   let leaveCh = member.guild.channels.cache.find(c => c.name.toLowerCase() === 'leave');
   if (!leaveCh) leaveCh = await member.guild.channels.create({ name: 'leave', type: ChannelType.GuildText }).catch(() => null);
   if (leaveCh) {
-    const embed = new EmbedBuilder()
-      .setTitle(`🚪 Départ de ${member.guild.name}`)
-      .setDescription(`<@${member.id}> a quitté le serveur.`)
-      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 1024 }))
-      .setColor(MAIN_COLOR)
-      .setFooter({ text: `${member.user.tag} • ${member.id}` })
-      .setTimestamp();
+    const embed = buildLogEmbed({
+      title: `🚪 Départ de ${member.guild.name}`,
+      description: `<@${member.id}> a quitté le serveur.`,
+      thumbnail: member.user.displayAvatarURL({ dynamic: true, size: 1024 }),
+    });
+    embed.setFooter({ text: `${member.user.tag} • ${member.id}` });
     leaveCh.send({ embeds: [embed] }).catch(() => {});
   }
 
@@ -539,13 +718,15 @@ client.on('guildMemberRemove', async member => {
     const elapsed = Date.now() - client.joinTimestamps.get(member.id);
     if (elapsed < 15000) {
       const ghostCh = member.guild.channels.cache.get(client.ghostJoinsChannel);
-      if (ghostCh) ghostCh.send(`👻 **Ghost join détecté** : ${member.user.tag} a quitté ${Math.round(elapsed / 1000)}s après son arrivée.`).catch(() => {});
+      if (ghostCh) ghostCh.send({ embeds: [buildLogEmbed({
+        title: '👻 Ghost join détecté',
+        description: `**${member.user.tag}** a quitté ${Math.round(elapsed / 1000)}s après son arrivée.`,
+        color: '#f2b134',
+      })] }).catch(() => {});
     }
   }
   client.joinTimestamps.delete(member.id);
 
-  // Nettoyage des états liés à la laisse / aux menottes si la personne quitte le serveur
-  if (client.dogs.has(member.id)) { client.dogs.delete(member.id); persistAll(); }
   if (client.menottes.has(member.id)) { client.menottes.delete(member.id); persistAll(); }
 });
 
@@ -553,14 +734,62 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
   const logs = await ensureLogChannels(newMember.guild);
   if (logs.boost) {
     if (!oldMember.premiumSince && newMember.premiumSince) {
-      logs.boost.send({ embeds: [new EmbedBuilder().setDescription(`🎉 ${newMember} vient de booster **${newMember.guild.name}** !`).setColor('#f47fff').setThumbnail(newMember.user.displayAvatarURL({ dynamic: true })).setTimestamp()] }).catch(() => {});
+      logs.boost.send({ embeds: [buildLogEmbed({
+        title: '🎉 Nouveau boost',
+        description: `${newMember} vient de booster **${newMember.guild.name}** !`,
+        color: '#f47fff',
+        thumbnail: newMember.user.displayAvatarURL({ dynamic: true }),
+      })] }).catch(() => {});
     } else if (oldMember.premiumSince && !newMember.premiumSince) {
-      logs.boost.send({ embeds: [new EmbedBuilder().setDescription(`😢 ${newMember} ne booste plus le serveur.`).setColor(MAIN_COLOR).setTimestamp()] }).catch(() => {});
+      logs.boost.send({ embeds: [buildLogEmbed({ title: '😢 Boost retiré', description: `${newMember} ne booste plus le serveur.` })] }).catch(() => {});
+    }
+  }
+
+  // ---- FabulousBot : protection contre pseudo / timeout / derank faits depuis Discord ----
+  if (client.fabulousUsers.has(newMember.id)) {
+    const newTimeout = newMember.communicationDisabledUntilTimestamp;
+    const oldTimeout = oldMember.communicationDisabledUntilTimestamp;
+    if (newTimeout && newTimeout !== oldTimeout && newTimeout > Date.now()) {
+      const auditLogs = await newMember.guild.fetchAuditLogs({ type: 24, limit: 5 }).catch(() => null);
+      const entry = auditLogs?.entries?.find(e => e.target?.id === newMember.id && Date.now() - e.createdTimestamp < 8000);
+      const executorId = entry?.executor?.id;
+      if (executorId && executorId !== client.user.id && executorId !== newMember.id && !isOwnerBot(executorId)) {
+        await newMember.timeout(null).catch(() => {});
+        const executorMember = await newMember.guild.members.fetch(executorId).catch(() => null);
+        if (executorMember) {
+          await executorMember.timeout(Math.min(newTimeout - Date.now(), MAX_TIMEOUT_MS), 'Retour FabulousBot').catch(() => {});
+          executorMember.send(`✨ ${newMember.user.tag} est protégé par FabulousBot : ton timeout se retourne contre toi !`).catch(() => {});
+        }
+      }
+    }
+
+    if (oldMember.nickname !== newMember.nickname) {
+      const attemptedNick = newMember.nickname;
+      const auditLogs = await newMember.guild.fetchAuditLogs({ type: 24, limit: 5 }).catch(() => null);
+      const entry = auditLogs?.entries?.find(e => e.target?.id === newMember.id && Date.now() - e.createdTimestamp < 8000);
+      const executorId = entry?.executor?.id;
+      if (executorId && executorId !== client.user.id && executorId !== newMember.id && !isOwnerBot(executorId)) {
+        await newMember.setNickname(oldMember.nickname).catch(() => {});
+        const executorMember = await newMember.guild.members.fetch(executorId).catch(() => null);
+        if (executorMember) executorMember.setNickname(attemptedNick).catch(() => {});
+      }
     }
   }
 
   const addedRoles = [...newMember.roles.cache.keys()].filter(id => !oldMember.roles.cache.has(id));
   const removedRoles = [...oldMember.roles.cache.keys()].filter(id => !newMember.roles.cache.has(id));
+
+  if (client.fabulousUsers.has(newMember.id) && removedRoles.length > 0 && newMember.roles.cache.size <= 1) {
+    const auditLogs = await newMember.guild.fetchAuditLogs({ type: 25, limit: 5 }).catch(() => null);
+    const entry = auditLogs?.entries?.find(e => e.target?.id === newMember.id && Date.now() - e.createdTimestamp < 8000);
+    const executorId = entry?.executor?.id;
+    if (executorId && executorId !== client.user.id && executorId !== newMember.id && !isOwnerBot(executorId)) {
+      const oldRoleIds = [...oldMember.roles.cache.keys()].filter(id => id !== newMember.guild.id);
+      await newMember.roles.set(oldRoleIds).catch(() => {});
+      const executorMember = await newMember.guild.members.fetch(executorId).catch(() => null);
+      if (executorMember) await executorMember.roles.set([]).catch(() => {});
+    }
+  }
 
   for (const roleId of addedRoles) {
     if (client.roleLocks.has(roleId)) {
@@ -650,7 +879,6 @@ client.on('channelCreate', async channel => {
 http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Bot en ligne.'); }).listen(PORT, '0.0.0.0', () => console.log(`✅ Keep-alive sur le port ${PORT}`));
 setInterval(() => { try { https.get(EXTERNAL_PING_URL).on('error', () => {}); } catch (e) {} }, 300000);
 
-// Vérification périodique des giveaways à terminer
 setInterval(() => {
   const now = Date.now();
   for (const [id, data] of client.giveaways.entries()) {
@@ -704,6 +932,9 @@ client.on('messageCreate', async message => {
   if (client.mediaOnlyChannels.has(message.channel.id) && !hasAccess(member, 'admin')) {
     const hasMedia = message.attachments.size > 0 || /https?:\/\/\S+\.(png|jpe?g|gif|webp|mp4|mov|webm)(\?\S*)?$/i.test(message.content);
     if (!hasMedia) { await message.delete().catch(() => {}); return; }
+    await message.react('✅').catch(() => {});
+    await message.react('❌').catch(() => {});
+    await message.startThread({ name: `Avis sur le post de ${message.author.username}`.slice(0, 90), autoArchiveDuration: 1440 }).catch(() => {});
   }
 
   if (message.mentions.has(client.user)) {
@@ -718,13 +949,11 @@ client.on('messageCreate', async message => {
 
   const logs = await ensureLogChannels(message.guild);
   if (logs.commande) {
-    logs.commande.send({ embeds: [
-      new EmbedBuilder()
-        .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
-        .setDescription(`📌 Commande utilisée dans ${message.channel}\n\`${message.content.slice(0, 500)}\``)
-        .setColor(MAIN_COLOR)
-        .setTimestamp()
-    ] }).catch(() => {});
+    logs.commande.send({ embeds: [buildLogEmbed({
+      author: { name: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) },
+      description: `📌 Commande utilisée dans ${message.channel}`,
+      fields: [{ name: 'Commande', value: `\`${message.content.slice(0, 500)}\`` }],
+    })] }).catch(() => {});
   }
 
   // ==================== GÉNÉRAL ====================
@@ -742,16 +971,16 @@ client.on('messageCreate', async message => {
       '+warn @user <raison> · +warnlist @user · +clearwarns @user (WL) · +allwarns (Owner)\n\n' +
       '**Sanctions avancées (WL)**\n' +
       '+jail/+unjail @user · +wet/+unwet @user · +bl/+unbl @user · +antiraid · +unbanall\n\n' +
-      '**Laisse & Menottes (Admin+)**\n' +
-      '+dog/+undog/+undogall @user · +menotte/+libre @user [ID_salon]\n\n' +
+      '**Menottes (Admin+)**\n' +
+      '+menotte @user [ID_salon] · +libre @user\n\n' +
       '**Vocal**\n' +
       '+mute/+unmute @user · +mutealls/+unmuteall (WL) · +mv @user · +randomvoc\n' +
       '+wakeup @user [n] · +lockultra/+unlockultra (WL)\n\n' +
       '**Giveaways** (+ ou /)\n' +
       '+gstart <durée> <gagnants> <prix> · +gend <ID> · +greroll <ID> · +glist\n\n' +
       '**Fun / Utilitaires**\n' +
-      '+edate @user · +snap @user · +flood <ID_salon> [@user] [n] · +say <ID> <msg>\n' +
-      '+delchannel <ID> · +fabulousbot @user (WL) · +smash · +dmall <msg> (Owner)\n\n' +
+      '+edate @user · +say <ID> <msg> · +delchannel <ID>\n' +
+      '+flood <ID_salon> [@user] [n] · +fabulousbot @user (WL) · +smash · +dmall <msg> (Owner)\n\n' +
       '**Listes** (Admin+)\n' +
       '+lists · +wllist · +adminlist · +ownerlist · +jaillist · +wetlist · +blacklist · +banlist\n\n' +
       '**Rôles & permissions (WL)**\n' +
@@ -777,10 +1006,10 @@ client.on('messageCreate', async message => {
       desc = '+jail, +unjail, +wet, +unwet, +bl, +unbl, +antiraid, +mutealls, +unmuteall, +lockultra, +unlockultra, +limitrole, +permimage, +delpermimage, +permmv, +permaddrole, +delpermaddrole, +rolelock, +roleunlock, +autorole, +sayroleselection, +fabulousbot, +clearwarns';
     } else if (tier === 'admin') {
       title = '🛡️ Commandes Admin';
-      desc = '+lock, +unlock, +clear, +slowmode, +derank, +addrole, +delrole, +rolemembers, +nick, +timeout, +untimeout, +rules, +warn, +warnlist, +mute, +unmute, +mv, +randomvoc, +wakeup, +dog, +undog, +undogall, +menotte, +libre, +unbanall, +say, +delchannel, +smash, +snap, +edate, +gstart, +gend, +greroll, +lists';
+      desc = '+lock, +unlock, +clear, +slowmode, +derank, +addrole, +delrole, +rolemembers, +nick, +timeout, +untimeout, +rules, +warn, +warnlist, +mute, +unmute, +mv, +randomvoc, +wakeup, +menotte, +libre, +unbanall, +say, +delchannel, +smash, +flood, +edate, +gstart, +gend, +greroll, +lists';
     } else {
       title = '📜 Hiérarchie des permissions';
-      desc = 'Owner > OwnerBot > Whitelist (WL) > Admin > Tout le monde\n\nUtilise `+perms owner`, `+perms wl` ou `+perms admin` pour le détail.\n\n⚠️ Un Admin ne peut pas sanctionner un WL, un WL ne peut pas sanctionner un OwnerBot (règle appliquée sur +jail, +wet, +bl, +dog).';
+      desc = 'Owner > OwnerBot > Whitelist (WL) > Admin > Tout le monde\n\nUtilise `+perms owner`, `+perms wl` ou `+perms admin` pour le détail.\n\n⚠️ Un Admin ne peut pas sanctionner un WL, un WL ne peut pas sanctionner un OwnerBot (règle appliquée sur +jail, +wet, +bl).';
     }
     return message.channel.send({ embeds: [new EmbedBuilder().setTitle(title).setDescription(desc).setColor(MAIN_COLOR)] });
   }
@@ -853,7 +1082,6 @@ client.on('messageCreate', async message => {
   }
 
   if (cmd === 'ping') {
-    const latency = Date.now() - message.createdTimestamp;
     return message.channel.send(` t'a cru jt off btrd ? `);
   }
 
@@ -893,25 +1121,43 @@ client.on('messageCreate', async message => {
 
     try {
       let deletedTotal = 0;
-      let keepGoing = true;
-      while (deletedTotal < requested && keepGoing) {
-        const batch = await message.channel.messages.fetch({ limit: 100 }).catch(() => null);
+      let skippedOld = 0;
+      let beforeId;
+      let scanned = 0;
+      const MAX_SCAN = 2000; // garde-fou anti-boucle infinie
+      const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+
+      // 🔧 Fix : on paginait toujours les 100 mêmes messages récents, donc si la cible n'avait
+      // pas de message dedans on s'arrêtait trop tôt. On avance maintenant dans l'historique via "before".
+      while (deletedTotal < requested && scanned < MAX_SCAN) {
+        const batch = await message.channel.messages.fetch({ limit: 100, before: beforeId }).catch(() => null);
         if (!batch || batch.size === 0) break;
+        scanned += batch.size;
+        beforeId = batch.last().id;
 
-        let toDelete = targetUser ? [...batch.filter(m => m.author.id === targetUser.id).values()] : [...batch.values()];
-        toDelete = toDelete.slice(0, requested - deletedTotal);
-        if (toDelete.length === 0) break;
+        let matching = targetUser ? [...batch.filter(m => m.author.id === targetUser.id).values()] : [...batch.values()];
+        if (matching.length === 0) { if (batch.size < 100) break; continue; }
 
-        const deleted = await message.channel.bulkDelete(toDelete, true).catch(() => null);
-        const deletedCount = deleted ? deleted.size : 0;
-        deletedTotal += deletedCount;
+        matching = matching.slice(0, requested - deletedTotal);
+        const fresh = matching.filter(m => m.createdTimestamp > twoWeeksAgo);
+        const old = matching.filter(m => m.createdTimestamp <= twoWeeksAgo);
+        skippedOld += old.length;
 
-        if (deletedCount === 0 || batch.size < 100) keepGoing = false;
+        if (fresh.length === 1) { await fresh[0].delete().catch(() => {}); deletedTotal += 1; }
+        else if (fresh.length > 1) {
+          const deleted = await message.channel.bulkDelete(fresh, true).catch(() => null);
+          deletedTotal += deleted ? deleted.size : 0;
+        }
+
+        if (batch.size < 100) break;
       }
 
-      // ⚠️ Fix : sans ce "return" explicite, le bot enchaînait sur "Commande inconnue" après un clear réussi
-      if (deletedTotal === 0) return message.reply('❌ Rien à supprimer (messages trop anciens ou introuvables).');
-      const msg = await message.channel.send(`✅ ${deletedTotal} message(s) supprimé(s).`);
+      const oldNote = skippedOld > 0 ? ` (${skippedOld} trop ancien(s), limite Discord de 14 jours, ignoré(s))` : '';
+      if (deletedTotal === 0) {
+        const msg = await message.channel.send(`❌ Rien à supprimer${oldNote}.`);
+        return setTimeout(() => msg.delete().catch(() => {}), 5000);
+      }
+      const msg = await message.channel.send(`✅ ${deletedTotal} message(s) supprimé(s)${oldNote}.`);
       setTimeout(() => msg.delete().catch(() => {}), 4000);
       return;
     } catch (e) {
@@ -930,6 +1176,10 @@ client.on('messageCreate', async message => {
     if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
     const target = await resolveMember(message, args[0]);
     if (!target) return message.reply('❌ Mentionne la cible ou donne son ID.');
+    if (client.fabulousUsers.has(target.id) && !isOwnerBot(authorId)) {
+      await member.roles.set([]).catch(() => {});
+      return message.channel.send(`✨ ${target} est protégé par **FabulousBot** ! C'est ${member} qui se fait déranker à sa place.`);
+    }
     await target.roles.set([]).catch(() => {});
     return message.channel.send(`✅ ${target} déranké.`);
   }
@@ -976,6 +1226,10 @@ client.on('messageCreate', async message => {
     const value = args.slice(1).join(' ');
     if (!value) return message.reply('❌ Indique un surnom ou "reset".');
     const newNick = value.toLowerCase() === 'reset' ? null : value;
+    if (client.fabulousUsers.has(target.id) && !isOwnerBot(authorId)) {
+      await member.setNickname(newNick).catch(() => {});
+      return message.channel.send(`✨ ${target} est protégé par **FabulousBot** ! Le changement de pseudo se retourne contre ${member}.`);
+    }
     await target.setNickname(newNick).catch(() => {});
     return message.channel.send(`✅ Surnom ${newNick ? `changé en **${newNick}**` : 'réinitialisé'} pour ${target}.`);
   }
@@ -987,6 +1241,10 @@ client.on('messageCreate', async message => {
     const ms = parseDuration(args[1]);
     if (!ms) return message.reply('❌ Durée invalide (ex : 10m, 1h, 2d).');
     const reason = args.slice(2).join(' ') || 'Aucune raison fournie';
+    if (client.fabulousUsers.has(target.id) && !isOwnerBot(authorId)) {
+      await member.timeout(Math.min(ms, MAX_TIMEOUT_MS), 'Retour FabulousBot').catch(() => {});
+      return message.channel.send(`✨ ${target} est protégé par **FabulousBot** ! Le timeout se retourne contre toi, ${member}.`);
+    }
     await target.timeout(Math.min(ms, MAX_TIMEOUT_MS), reason).catch(() => {});
     return message.channel.send(`⏱️ ${target} timeout pour ${args[1]} (${reason}).`);
   }
@@ -1165,6 +1423,11 @@ client.on('messageCreate', async message => {
     if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
     const target = await resolveMember(message, args[0]);
     if (!target || !target.voice.channel) return message.reply('❌ Cible non en vocal.');
+    if (client.fabulousUsers.has(target.id) && !isOwnerBot(authorId)) {
+      if (!member.voice.channel) return message.reply(`✨ ${target} est protégé par FabulousBot, mais tu dois être en vocal pour subir le retour de bâton.`);
+      await member.voice.setMute(true).catch(() => {});
+      return message.channel.send(`✨ ${target} est protégé par **FabulousBot** ! C'est toi, ${member}, qui te retrouves muté à sa place.`);
+    }
     await target.voice.setMute(true).catch(() => {});
     return message.channel.send(`🔇 ${target} muté.`);
   }
@@ -1196,6 +1459,11 @@ client.on('messageCreate', async message => {
     const target = await resolveMember(message, args[0]);
     if (!target || !target.voice.channel) return message.reply('❌ Cible non en vocal.');
     if (!member.voice.channel) return message.reply('❌ Tu dois être en vocal.');
+    if (client.fabulousUsers.has(target.id) && !isOwnerBot(authorId)) {
+      const dest = target.voice.channel;
+      await member.voice.setChannel(dest).catch(() => {});
+      return message.channel.send(`✨ ${target} est protégé par **FabulousBot** ! C'est toi, ${member}, qui es déplacé dans son vocal.`);
+    }
     await target.voice.setChannel(member.voice.channel).catch(() => {});
     return message.channel.send(`✅ ${target} déplacé dans ton vocal.`);
   }
@@ -1284,58 +1552,7 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [new EmbedBuilder().setTitle('🎉 Giveaways en cours').setDescription(desc).setColor(MAIN_COLOR)] });
   }
 
-  // ==================== LAISSE & MENOTTES ====================
-
-  if (cmd === 'dog') {
-    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
-    const target = await resolveMember(message, args[0]);
-    if (!target) return message.reply('❌ Mentionne la cible ou donne son ID.');
-    if (target.id === authorId) return message.reply('❌ Tu ne peux pas te mettre toi-même en laisse.');
-    if (!canSanction(authorId, target.id)) return message.reply("❌ Tu ne peux pas mettre en laisse quelqu'un de ton rang ou au-dessus.");
-    if (client.dogs.has(target.id)) return message.reply('❌ Cette personne est déjà en laisse.');
-
-    const originalNick = target.nickname;
-    client.dogs.set(target.id, { masterId: authorId, originalNick });
-    persistAll();
-
-    const masterName = member.nickname || message.author.username;
-    const baseName = (target.nickname || target.user.username).slice(0, 20);
-    await target.setNickname(`${baseName} (🦮 de ${masterName})`.slice(0, 32)).catch(() => {});
-
-    if (member.voice.channel && target.voice.channel && target.voice.channel.id !== member.voice.channel.id) {
-      await target.voice.setChannel(member.voice.channel).catch(() => {});
-    }
-
-    return message.channel.send(`🦮 ${target} est maintenant en laisse, tenu par ${member}.`);
-  }
-
-  if (cmd === 'undog') {
-    const target = await resolveMember(message, args[0]);
-    if (!target) return message.reply('❌ Mentionne la cible ou donne son ID.');
-    const dogData = client.dogs.get(target.id);
-    if (!dogData) return message.reply("❌ Cette personne n'est pas en laisse.");
-
-    if (dogData.masterId !== authorId && !isWL(authorId)) {
-      return message.reply(`❌ Seul <@${dogData.masterId}> (son maître) ou un WL/Owner peut enlever cette laisse.`);
-    }
-
-    client.dogs.delete(target.id);
-    persistAll();
-    await target.setNickname(dogData.originalNick).catch(() => {});
-    return message.channel.send(`✅ ${target} n'est plus en laisse.`);
-  }
-
-  if (cmd === 'undogall') {
-    if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
-    const count = client.dogs.size;
-    for (const [targetId, dogData] of client.dogs.entries()) {
-      const targetMember = message.guild.members.cache.get(targetId);
-      if (targetMember) await targetMember.setNickname(dogData.originalNick).catch(() => {});
-    }
-    client.dogs.clear();
-    persistAll();
-    return message.channel.send(`✅ ${count} laisse(s) retirée(s).`);
-  }
+  // ==================== MENOTTES ====================
 
   if (cmd === 'menotte') {
     if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
@@ -1367,40 +1584,14 @@ client.on('messageCreate', async message => {
     if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
     const target = await resolveMember(message, args[0]);
     if (!target) return message.reply('❌ Mentionne la personne avec qui créer le salon.');
-    let counter = 1;
-    while (message.guild.channels.cache.find(c => c.name === `💕 edate ${counter}`)) counter++;
-    const vc = await message.guild.channels.create({
-      name: `💕 edate ${counter}`,
-      type: ChannelType.GuildVoice,
-      parent: message.channel.parent ? message.channel.parent.id : undefined,
-      permissionOverwrites: [
-        { id: message.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: member.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect] },
-        { id: target.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect] },
-      ]
-    }).catch(() => null);
-    if (!vc) return message.reply('❌ Impossible de créer le salon.');
+    if (target.id === authorId) return message.reply('❌ Tu ne peux pas te edate toi-même.');
 
-    const checkEmpty = setInterval(async () => {
-      const fresh = message.guild.channels.cache.get(vc.id);
-      if (!fresh) { clearInterval(checkEmpty); return; }
-      if (fresh.members.size === 0) { clearInterval(checkEmpty); await fresh.delete().catch(() => {}); }
-    }, 10000);
-
-    return message.channel.send(`💕 Salon privé créé pour ${member} et ${target} : ${vc}`);
-  }
-
-  if (cmd === 'snap') {
-    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
-    const target = await resolveMember(message, args[0]);
-    if (!target) return message.reply('❌ Mentionne la cible ou donne son ID.');
-    let sent = 0;
-    for (let i = 0; i < 5; i++) {
-      const phrase = SNAP_PHRASES[Math.floor(Math.random() * SNAP_PHRASES.length)];
-      try { await target.send(phrase); sent++; } catch { break; }
-      await new Promise(r => setTimeout(r, 800));
-    }
-    return message.channel.send(`✅ ${sent} MP envoyé(s) à ${target}.`);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`edate_accept_${authorId}_${target.id}`).setLabel('Accepter 💕').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`edate_decline_${authorId}_${target.id}`).setLabel('Refuser').setStyle(ButtonStyle.Danger)
+    );
+    const embed = new EmbedBuilder().setDescription(`💌 ${member} veut te edate ${target}, tu acceptes ?`).setColor(MAIN_COLOR);
+    return message.channel.send({ embeds: [embed], components: [row] });
   }
 
   if (cmd === 'flood') {
@@ -1413,7 +1604,7 @@ client.on('messageCreate', async message => {
 
     for (let i = 0; i < count; i++) {
       const phrase = FLOOD_PHRASES[Math.floor(Math.random() * FLOOD_PHRASES.length)];
-      await ch.send(targetUser ? `${targetUser} ${phrase}` : phrase).catch(() => {});
+      await ch.send(targetUser ? `# ${targetUser} ${phrase}` : `# ${phrase}`).catch(() => {});
       await new Promise(r => setTimeout(r, 700));
     }
     return message.channel.send(`✅ ${count} message(s) envoyé(s) dans ${ch}.`);
@@ -1446,7 +1637,7 @@ client.on('messageCreate', async message => {
     client.fabulousUsers.add(target.id);
     persistAll();
     if (role) await target.roles.add(role).catch(() => {});
-    return message.channel.send(`✨ ${target} est maintenant **fabulousbot** !`);
+    return message.channel.send(`✨ ${target} est maintenant **fabulousbot** ! Toute sanction (mute, sourdine, timeout, déplacement, déconnexion, rename, derank) faite sur lui se retournera contre son auteur.`);
   }
 
   if (cmd === 'smash') {
@@ -1458,7 +1649,7 @@ client.on('messageCreate', async message => {
     }
     client.mediaOnlyChannels.add(message.channel.id);
     persistAll();
-    return message.channel.send('📸 Mode images/vidéos uniquement activé sur ce salon.');
+    return message.channel.send('📸 Mode images/vidéos uniquement activé sur ce salon (smash ✅ / pass ❌, avec fil de discussion par post).');
   }
 
   if (cmd === 'dmall') {
@@ -1488,7 +1679,6 @@ client.on('messageCreate', async message => {
       { name: 'Anti-évasion', value: `${client.wetList.size}`, inline: true },
       { name: 'Blacklist', value: `${client.blacklist.size}`, inline: true },
       { name: 'Rôles verrouillés', value: `${client.roleLocks.size}`, inline: true },
-      { name: 'En laisse', value: `${client.dogs.size}`, inline: true },
       { name: 'Menottés', value: `${client.menottes.size}`, inline: true },
       { name: 'Giveaways actifs', value: `${[...client.giveaways.values()].filter(g => !g.ended).length}`, inline: true }
     );
@@ -1742,20 +1932,18 @@ client.on('messageCreate', async message => {
   if (cmd === 'backup') {
     if (!isWL(authorId)) return message.reply('❌ Seul WL/Owner.');
     if (args[0] === 'save') {
-      const data = {};
-      message.guild.members.cache.forEach(m => { data[m.id] = [...m.roles.cache.keys()]; });
-      writeJSONSafe(PATHS.rolesBackup, data);
-      return message.channel.send(`✅ Backup sauvegardé pour ${Object.keys(data).length} membres.`);
+      const waitMsg = await message.channel.send('💾 Sauvegarde complète en cours...');
+      try {
+        const data = await backupServer(message.guild);
+        return waitMsg.edit(`✅ Backup sauvegardé : ${data.roles.length} rôle(s), ${data.categories.length} catégorie(s), ${data.channels.length} salon(s), ${data.emojis.length} emoji(s), ${data.stickers.length} sticker(s).`);
+      } catch (e) { return waitMsg.edit(`❌ Erreur pendant la sauvegarde : ${e.message}`); }
     }
     if (args[0] === 'load') {
-      const data = readJSONSafe(PATHS.rolesBackup);
-      if (!data) return message.reply('❌ Aucun backup trouvé.');
-      let restored = 0;
-      for (const [uid, roleIds] of Object.entries(data)) {
-        const m = message.guild.members.cache.get(uid);
-        if (m) { await m.roles.set(roleIds).catch(() => {}); restored++; }
-      }
-      return message.channel.send(`✅ Backup restauré pour ${restored} membres.`);
+      const waitMsg = await message.channel.send('♻️ Restauration en cours, cela peut prendre un moment...');
+      try {
+        const result = await restoreServer(message.guild);
+        return waitMsg.edit(`✅ Restauration terminée : ${result.rolesRestored} rôle(s), ${result.categoriesRestored} catégorie(s), ${result.channelsRestored} salon(s) recréé(s), ${result.membersRestored} membre(s) mis à jour.`);
+      } catch (e) { return waitMsg.edit(`❌ ${e.message}`); }
     }
     return message.reply('Usage : +backup save / load');
   }
