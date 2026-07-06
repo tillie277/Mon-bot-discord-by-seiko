@@ -23,25 +23,25 @@ const DATA_DIR = path.resolve(__dirname, 'data');
 const GIVEAWAY_EMOJI = '🎉';
 const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // limite Discord : 28 jours
 
-// 👉 Phrases utilisées par +flood — ajoute/modifie-les directement ici (visible sur GitHub)
+// 👉 Phrases utilisées par +flood
 const FLOOD_PHRASES = [
   'Viole ta salope de mère',
   'Petite merde',
   'Sale tocard fais toi violer sous un pont',
   'ᴾⱽ Aruno on top 👑',
-  'Suce ma bite'
-  'Déchet humain'
-  'Insecte insignifiant'
-  'T’es répugnant´
-  'Dégage , crasseux'
-  ´Fais toi poutrer par ibliss'
-  'Fils de pute'
-  'Nique ta mere la caissièré'
-  'Prends toi un doigt dans le cul t’iras mieux'
-  'Vas faire un tour dans la chatte à ta mère si j’y suis´
-  'Ton père le sioniste'
-  'Casse un tour'
-  'Ta gueule'
+  'Suce ma bite',
+  'Déchet humain',
+  'Insecte insignifiant',
+  'T’es répugnant',
+  'Dégage , crasseux',
+  'Fais toi poutrer par ibliss',
+  'Fils de pute',
+  'Nique ta mere la caissièré',
+  'Prends toi un doigt dans le cul t’iras mieux',
+  'Vas faire un tour dans la chatte à ta mère si j’y suis',
+  'Ton père le sioniste',
+  'Casse un tour',
+  'Ta gueule',
   'Vas sur sweet dream espèce de honte'
 ];
 
