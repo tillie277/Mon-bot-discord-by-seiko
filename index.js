@@ -28,22 +28,21 @@ const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // limite Discord : 28 jours
 
 // 👉 Phrases utilisées par +flood — modifie cette liste comme tu veux, c'est fait pour.
 const FLOOD_PHRASES = [
-  '🎉 Tu as gagné... rien du tout !',
-  'Cocorico 🐓',
-  'Saviez-vous que les poulpes ont trois cœurs ? 🐙',
-  'Pouet pouet 🚗',
-  'Alerte : niveau de fun détecté à 100% 📈',
-  'Un café pour la route ? ☕',
-  'Bzzzz je suis une abeille 🐝',
-  'Ceci est un message très important (ou pas)',
-  'GG WP 🎮',
-  'Chargement du fun en cours... ⏳',
-  'Bip bip 🤖',
-  'Succès débloqué : "A lu ce message" 🏆',
-  'On se calme, on respire 🧘',
-  'Petit rappel : hydrate-toi 💧',
-  'Le chat est passé par ici 🐱',
-  "Chuck Norris compte jusqu'à l'infini... deux fois",
+  'Viole ta salope de mère',
+  'Petite merde',
+  'Sale tocard fais toi violer sous un pont',
+  'Vas sur sweet dream espèce de honte',
+  'Suce ma bite',
+  'Insecte insignifiant',
+  'T’es répugnant',
+  'Fais toi poutrer par ibliss',
+  'Fils de pute',
+  'Nique ta mere la caissière',
+  'Prends toi un doigt dans le cul t’iras mieux',
+  'Vas faire un tour dans la chatte à ta mère si j’y suis',
+  'Ton père le sioniste',
+  'Casse un tour',
+  'Ta gueule',
 ];
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
