@@ -25,20 +25,29 @@ const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // limite Discord : 28 jours
 
 // 👉 Phrases utilisées par +flood — ajoute/modifie-les directement ici (visible sur GitHub)
 const FLOOD_PHRASES = [
-  'Coucou 👋',
-  'Quoi de neuf par ici ?',
-  'On se réveille !',
+  'Viole ta salope de mère',
+  'Petite merde',
+  'Sale tocard fais toi violer sous un pont',
   'ᴾⱽ Aruno on top 👑',
-  'Un peu de vie dans ce salon !'
+  'Suce ma bite'
+  'Vas sur sweet dream espèce de honte'
+  'Déchet humain'
+  'Insecte insignifiant'
+  'T’es répugnant´
+  'Dégage , crasseux'
+  ´Fais toi poutrer par ibliss'
+  'Fils de pute'
+  'Nique ta mere la caissièré'
+  'Prends toi un doigt dans le cul t’iras mieux'
+  'Vas faire un tour dans la chatte à ta mère si j’y suis´
+  'Ton père le sioniste'
+  'Casse un tour'
+  'Ta gueule'
 ];
 
 // 👉 Phrases utilisées par +snap (petit MP taquin, pas de demande de photo)
 const SNAP_PHRASES = [
-  '👀 Quelqu\'importe pense à toi par ici...',
-  '📸 Alerte : tu nous manques sur le serveur !',
-  '✨ Un petit coucou de la part de la modération !',
-  '🔔 Reviens vite faire un tour sur le serveur !',
-  "🎉 On t'a réclamé, viens voir !"
+  '@executordisplayname te demande ton snap !'
 ];
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
