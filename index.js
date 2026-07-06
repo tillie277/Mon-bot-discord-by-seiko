@@ -845,7 +845,7 @@ client.on('messageCreate', async message => {
 
   if (cmd === 'ping') {
     const latency = Date.now() - message.createdTimestamp;
-    return message.channel.send(`🏓 Pong ! **${latency}ms** — t'a cru jt off btrd? 😏`);
+    return message.channel.send(` — t'a cru jt off btrd ? `);
   }
 
   if (cmd === 'mybotserv') {
