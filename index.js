@@ -1409,6 +1409,7 @@ client.on('shardError', (err) => {
 });
 
 // ============================================================
+// ============================================================
 //  DÉMARRAGE
 // ============================================================
 console.log("🔄 Chargement des données...");
@@ -1424,17 +1425,26 @@ setInterval(persistAll, 60000);
 const token = process.env.TOKEN?.trim();
 if (!token || token.length < 50) {
     console.error('❌ TOKEN manquant ou invalide dans les variables Render !');
-    console.error('Ajoute dans Environment : TOKEN = ton_token');
     process.exit(1);
 }
 
 console.log("🔑 Tentative de connexion à Discord...");
 
 client.login(token)
-    .then(() => console.log('✅ Login Discord réussi - Bot en cours de connexion...'))
+    .then(() => {
+        console.log('✅ Login Discord réussi - Bot en cours de connexion...');
+    })
     .catch(err => {
         console.error('❌ ÉCHEC LOGIN Discord :', err.message);
-        if (err.message.includes('token')) {
-            console.error('💡 Vérifie que le token est correct et régénère-le si besoin.');
-        }
+        console.error('Détails complets :', err);
     });
+
+// Capture les erreurs cachées
+process.on('uncaughtException', (err) => {
+    console.error('❌ Erreur non gérée :', err.message);
+    console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Promesse rejetée :', reason);
+});
