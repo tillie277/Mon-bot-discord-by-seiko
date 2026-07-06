@@ -1412,33 +1412,29 @@ client.on('shardError', (err) => {
 // ============================================================
 //  DÉMARRAGE
 // ============================================================
-require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+// ============================================================
+//  DÉMARRAGE (version debug)
+console.log("🔄 Chargement des données...");
+try {
+    loadAll();
+    console.log("✅ Données chargées avec succès.");
+} catch (e) {
+    console.error("❌ Erreur loadAll :", e);
+}
 
-console.log("🚀 Démarrage minimal...");
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
-
-client.once('ready', () => {
-  console.log(`✅ BOT CONNECTÉ : ${client.user.tag}`);
-});
+setInterval(persistAll, 60000);
 
 const token = process.env.TOKEN?.trim();
 if (!token) {
-  console.error("❌ Pas de TOKEN trouvé !");
-  process.exit(1);
+    console.error("❌ TOKEN non trouvé !");
+    process.exit(1);
 }
 
-console.log("🔑 Login en cours...");
+console.log("🔑 Tentative de login Discord...");
 
 client.login(token)
-  .then(() => console.log("✅ Login promise résolue"))
-  .catch(err => console.error("❌ Erreur login :", err.message));
+    .then(() => console.log("✅ Login promise résolue"))
+    .catch(err => console.error("❌ Erreur login :", err.message, err));
 
-console.log("✅ Keep-alive HTTP");
-require('http').createServer((req, res) => {
-  res.writeHead(200);
-  res.end('Bot alive');
-}).listen(10000);
+process.on('uncaughtException', err => console.error("❌ Erreur non gérée :", err));
+process.on('unhandledRejection', (reason) => console.error("❌ Rejection :", reason));
