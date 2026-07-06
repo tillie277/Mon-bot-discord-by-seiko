@@ -668,7 +668,7 @@ client.on('messageCreate', async message => {
     return message.channel.send({ embeds: [embed] });
   }
 
-  if (cmd === 'ping') return message.channel.send('🏓 Pong ! Je suis bien en ligne.');
+  if (cmd === 'ping') return message.channel.send('ta cru jt off btrd ?');
 
   if (cmd === 'mybotserv') {
     const list = client.guilds.cache.map(g => `• ${g.name} (${g.id}) — ${g.memberCount} membres`).join('\n');
