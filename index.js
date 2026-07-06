@@ -708,7 +708,7 @@ client.on('messageCreate', async message => {
 
   if (message.mentions.has(client.user)) {
     if (isOwnerBot(authorId)) return message.reply('Salut boss, prêt à tout 🔥');
-    return message.reply('👋 Salut ! Tape `+help` pour voir toutes mes commandes.');
+    return message.reply(' tu veux quoi freuurrr ');
   }
 
   if (!message.content.startsWith(PREFIX)) return;
