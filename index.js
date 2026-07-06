@@ -1411,16 +1411,30 @@ client.on('shardError', (err) => {
 // ============================================================
 //  DÉMARRAGE
 // ============================================================
-loadAll();
+console.log("🔄 Chargement des données...");
+try {
+    loadAll();
+    console.log("✅ Données chargées avec succès.");
+} catch (e) {
+    console.error("❌ Erreur pendant loadAll() :", e);
+}
+
 setInterval(persistAll, 60000);
 
-const token = process.env.TOKEN;
-if (!token) {
-    console.error('❌ TOKEN manquant dans les variables d\'environnement Render !');
-    console.error('Va dans Environment → Add Variable → TOKEN = ton_token');
+const token = process.env.TOKEN?.trim();
+if (!token || token.length < 50) {
+    console.error('❌ TOKEN manquant ou invalide dans les variables Render !');
+    console.error('Ajoute dans Environment : TOKEN = ton_token');
     process.exit(1);
 }
 
+console.log("🔑 Tentative de connexion à Discord...");
+
 client.login(token)
-  .then(() => console.log('✅ Login réussi - Bot prêt !'))
-  .catch(err => console.error('❌ Login error :', err));
+    .then(() => console.log('✅ Login Discord réussi - Bot en cours de connexion...'))
+    .catch(err => {
+        console.error('❌ ÉCHEC LOGIN Discord :', err.message);
+        if (err.message.includes('token')) {
+            console.error('💡 Vérifie que le token est correct et régénère-le si besoin.');
+        }
+    });
