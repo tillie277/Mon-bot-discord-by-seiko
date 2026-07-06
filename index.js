@@ -124,7 +124,7 @@ client.welcomeConfig = null;        // { channelId, message }
 client.linkViolations = new Map();  // userId -> nombre d'infractions anti-lien (non persistant)
 client.messageTimestamps = new Map(); // userId -> [timestamps] (anti-spam, non persistant)
 client.channelActionTimestamps = new Map(); // userId -> { deletes:[], creates:[] } (anti-raid, non persistant)
-client.dogLocks = new Map(); // userId cible -> { lockedNick: string, executorId: string }
+client.dogLocks = new Map(); // userId cible -> { lockedNick, executorId, originalNick }
 // ============================================================
 //  UTILITAIRES JSON
 // ============================================================
@@ -196,6 +196,8 @@ function loadAll() {
   client.welcomeConfig = readJSONSafe(PATHS.welcomeConfig) || null;
   const dogData = readJSONSafe(path.join(DATA_DIR, 'dogLocks.json'));
 if (dogData) dogData.forEach(([k, v]) => client.dogLocks.set(k, v));
+  const dogData = readJSONSafe(path.join(DATA_DIR, 'dogLocks.json'));
+  if (dogData) dogData.forEach(([k, v]) => client.dogLocks.set(k, v));
 }
 
 // ============================================================
@@ -765,6 +767,35 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         }
       }
     }
+    // ---- Protection DOG (verrouillage de pseudo) ----
+if (client.dogLocks.has(newMember.id)) {
+  const dogData = client.dogLocks.get(newMember.id);
+  
+  if (newMember.nickname !== dogData.lockedNick) {
+    const auditLogs = await newMember.guild.fetchAuditLogs({ 
+      type: 24, 
+      limit: 5 
+    }).catch(() => null);
+    
+    const entry = auditLogs?.entries?.find(e => 
+      e.target?.id === newMember.id && 
+      Date.now() - e.createdTimestamp < 10000
+    );
+    
+    const executorId = entry?.executor?.id;
+
+    if (executorId && executorId !== client.user.id) {
+      // Remet le pseudo verrouillé
+      await newMember.setNickname(dogData.lockedNick).catch(() => {});
+      
+      // Message à l'executor
+      const executorMember = await newMember.guild.members.fetch(executorId).catch(() => null);
+      if (executorMember) {
+        executorMember.send(`🦮 Tu as essayé de changer le pseudo d'un **dog**. Il est protégé.`).catch(() => {});
+      }
+    }
+  }
+}
     // Protection DOG (verrouillage de pseudo)
 if (client.dogLocks.has(newMember.id)) {
   const dogData = client.dogLocks.get(newMember.id);
@@ -1688,78 +1719,74 @@ client.on('messageCreate', async message => {
     }
     return message.channel.send(`✅ Terminé : ${sent}/${members.length} messages envoyés.`);
   }
-// ==================== DOG & SNAP (Owner/OwnerBot/WL/Admin) ====================
+  // ==================== DOG & SNAP ====================
 
-if (['dog', 'snap', 'undog', 'undogalls'].includes(cmd)) {
-  if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé. (seuls owner/ownerbot/wl/admins)');
-  
-  const target = await resolveMember(message, args[0]);
-  if (!target && cmd !== 'undogalls') return message.reply('❌ Mentionne la cible ou donne son ID.');
+  if (['dog', 'snap', 'undog', 'undogalls'].includes(cmd)) {
+    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé. (seuls owner/ownerbot/wl/admins)');
 
-  if (cmd === 'dog') {
-    if (!target) return;
-    const targetDisplay = target.user.tag || target.displayName;
-    const executorDisplay = message.author.tag || message.member.displayName;
-    
-    const newNick = `${targetDisplay} (🦮 de ${executorDisplay})`;
-    
-    // Sauvegarde de l'ancien pseudo si possible
-    const oldNick = target.nickname || target.user.username;
-    
-    await target.setNickname(newNick).catch(() => {});
-    
-    client.dogLocks.set(target.id, {
-      lockedNick: newNick,
-      executorId: message.author.id,
-      originalNick: oldNick
-    });
-    
-    persistAll();
-    return message.channel.send(`🦮 ${target} est maintenant **dog** de ${message.author}. Pseudo verrouillé.`);
-  }
+    if (cmd === 'dog') {
+      const target = await resolveMember(message, args[0]);
+      if (!target) return message.reply('❌ Mentionne la cible.');
 
-  if (cmd === 'undog') {
-    if (!target) return;
-    if (!client.dogLocks.has(target.id)) return message.reply("❌ Cette personne n'est pas dog.");
-    
-    const data = client.dogLocks.get(target.id);
-    await target.setNickname(data.originalNick || null).catch(() => {});
-    client.dogLocks.delete(target.id);
-    persistAll();
-    return message.channel.send(`✅ ${target} n'est plus dog.`);
-  }
+      const targetDisplay = target.user.tag || target.displayName;
+      const executorDisplay = message.author.tag || message.member.displayName;
+      const newNick = `${targetDisplay} (🦮 de ${executorDisplay})`;
+      const originalNick = target.nickname || target.user.username;
 
-  if (cmd === 'undogalls') {
-    let count = 0;
-    for (const [id, data] of client.dogLocks.entries()) {
-      const m = message.guild.members.cache.get(id);
-      if (m) {
-        await m.setNickname(data.originalNick || null).catch(() => {});
-      }
-      client.dogLocks.delete(id);
-      count++;
+      await target.setNickname(newNick).catch(() => {});
+
+      client.dogLocks.set(target.id, {
+        lockedNick: newNick,
+        executorId: message.author.id,
+        originalNick: originalNick
+      });
+
+      persistAll();
+      return message.channel.send(`🦮 ${target} est maintenant dog de ${message.author}.`);
     }
-    persistAll();
-    return message.channel.send(`✅ ${count} dog(s) retiré(s).`);
-  }
 
-  if (cmd === 'snap') {
-    if (!target) return;
-    const executorName = message.author.tag || message.member.displayName;
-    const msg = `${executorName} vous demande votre snap`;
+    if (cmd === 'undog') {
+      const target = await resolveMember(message, args[0]);
+      if (!target) return message.reply('❌ Mentionne la cible.');
+      if (!client.dogLocks.has(target.id)) return message.reply("❌ Cette personne n'est pas dog.");
 
-    for (let i = 0; i < 5; i++) {
-      try {
-        await target.user.send(msg);
-        await new Promise(r => setTimeout(r, 800)); // petit délai pour éviter rate limit
-      } catch (e) {
-        // si DM fermé
-        return message.reply("❌ Impossible d'envoyer les snaps (DM fermés).");
-      }
+      const data = client.dogLocks.get(target.id);
+      await target.setNickname(data.originalNick || null).catch(() => {});
+      client.dogLocks.delete(target.id);
+      persistAll();
+      return message.channel.send(`✅ ${target} n'est plus dog.`);
     }
-    return message.channel.send(`📸 5 snaps envoyés à ${target}.`);
+
+    if (cmd === 'undogalls') {
+      let count = 0;
+      for (const [id, data] of client.dogLocks.entries()) {
+        const m = message.guild.members.cache.get(id);
+        if (m) await m.setNickname(data.originalNick || null).catch(() => {});
+        client.dogLocks.delete(id);
+        count++;
+      }
+      persistAll();
+      return message.channel.send(`✅ ${count} dog(s) retiré(s).`);
+    }
+
+    if (cmd === 'snap') {
+      const target = await resolveMember(message, args[0]);
+      if (!target) return message.reply('❌ Mentionne la cible.');
+
+      const executorName = message.author.tag || message.member.displayName;
+      const msg = `${executorName} vous demande votre snap`;
+
+      for (let i = 0; i < 5; i++) {
+        try {
+          await target.user.send(msg);
+          await new Promise(r => setTimeout(r, 800));
+        } catch {
+          return message.reply("❌ Impossible d'envoyer les DM (ils sont fermés).");
+        }
+      }
+      return message.channel.send(`📸 5 snaps envoyés à ${target}.`);
+    }
   }
-}
   // ==================== LISTES (ADMIN) ====================
 
   if (cmd === 'lists') {
