@@ -30,7 +30,6 @@ const FLOOD_PHRASES = [
   'Sale tocard fais toi violer sous un pont',
   'ᴾⱽ Aruno on top 👑',
   'Suce ma bite'
-  'Vas sur sweet dream espèce de honte'
   'Déchet humain'
   'Insecte insignifiant'
   'T’es répugnant´
@@ -43,6 +42,7 @@ const FLOOD_PHRASES = [
   'Ton père le sioniste'
   'Casse un tour'
   'Ta gueule'
+  'Vas sur sweet dream espèce de honte'
 ];
 
 // 👉 Phrases utilisées par +snap (petit MP taquin, pas de demande de photo)
