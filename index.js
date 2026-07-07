@@ -28,21 +28,21 @@ const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // limite Discord : 28 jours
 
 // 👉 Phrases utilisées par +flood — modifie cette liste comme tu veux, c'est fait pour.
 const FLOOD_PHRASES = [
-  'Viole ta salope de mère',
-  'Petite merde',
-  'Sale tocard fais toi violer sous un pont',
-  'Vas sur sweet dream espèce de honte',
-  'Suce ma bite',
-  'Insecte insignifiant',
-  'T’es répugnant',
-  'Fais toi poutrer par ibliss',
-  'Fils de pute',
-  'Nique ta mere la caissière',
-  'Prends toi un doigt dans le cul t’iras mieux',
-  'Vas faire un tour dans la chatte à ta mère si j’y suis',
-  'Ton père le sioniste',
-  'Casse un tour',
-  'Ta gueule',
+  'VIOLE TA SALOPE DE MÈRE',
+  'PETITE MERDE',
+  'SALE TOCARD FAIS TOI VIOLER SOUS UN PONT',
+  'VAS SUR SWEET DREAM ESPÈCE DE HONTE',
+  'SUCE MA BITE',
+  'INSECTE INSIGNIFIANT',
+  'T´ES RÉPUGNANT',
+  'FAIS TOI POUTRER PAR IBLISS',
+  'FILS DE PUTE',
+  'NIQUE TA MÈRE LA CAISSIÈRE',
+  'PREND TOI UN DOIGT DANS L'CUL TIRAS MIEUX ',
+  'VAS FAIRE UN TOUR DANS LA CHATTE À TA MÈRE SI J'Y SUIS',
+  'TON PÈRE LE SIONISTE',
+  'CASSE UN TOUR',
+  'TA GUEULE',
 ];
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
