@@ -2177,6 +2177,9 @@ client.on('shardDisconnect', (event, id) => console.error(`⚠️ Shard ${id} d�
 process.on('unhandledRejection', (err) => console.error('❌ Unhandled rejection :', err));
 
 console.log('Token détecté, longueur :', token?.length || 0);
+console.log('discord.js version:', require('discord.js').version);
+setInterval(() => console.log('⏱ toujours vivant -', new Date().toISOString()), 10000);
+
 
 client.login(token)
   .then(() => console.log('✅ Login réussi - Bot prêt !'))
