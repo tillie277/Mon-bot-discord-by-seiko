@@ -811,25 +811,6 @@ if (client.dogLocks.has(newMember.id)) {
     }
   }
 }
-    // Protection DOG (verrouillage de pseudo)
-if (client.dogLocks.has(newMember.id)) {
-  const dogData = client.dogLocks.get(newMember.id);
-  if (newMember.nickname !== dogData.lockedNick) {
-    const auditLogs = await newMember.guild.fetchAuditLogs({ type: 24, limit: 5 }).catch(() => null);
-    const entry = auditLogs?.entries?.find(e => e.target?.id === newMember.id && Date.now() - e.createdTimestamp < 10000);
-    const executorId = entry?.executor?.id;
-
-    if (executorId && executorId !== client.user.id) {
-      await newMember.setNickname(dogData.lockedNick).catch(() => {});
-      
-      // Optionnel : punir l'executor
-      const executorMember = await newMember.guild.members.fetch(executorId).catch(() => null);
-      if (executorMember) {
-        executorMember.send(`🦮 Tu as essayé de modifier le pseudo d'un dog. Il est protégé.`).catch(() => {});
-      }
-    }
-  }
-}
 
     if (oldMember.nickname !== newMember.nickname) {
       const attemptedNick = newMember.nickname;
@@ -976,6 +957,22 @@ client.on('messageCreate', async message => {
         .then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
     }
   }
+      // Crée un fil de discussion
+    try {
+      const thread = await message.startThread({ ... });
+      ...
+    } catch (e) {}
+  }
+
+  // ==================== ← AJOUTE ICI ====================
+  // ====================== PARSER DE COMMANDES ======================
+  if (!message.content.startsWith(PREFIX)) return;
+
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/g);
+  let cmd = args.shift().toLowerCase();   // cmd en minuscule seulement
+
+  // ==================== GÉNÉRAL ====================
+  
 
   // ---- Anti-lien (GIF uniquement) ----
   const bypassLink = isOwnerBot(authorId) || isWL(authorId) || isAdminUser(member) || hasPermImage(member);
@@ -1026,44 +1023,7 @@ client.on('messageCreate', async message => {
     } catch (e) {}
   }
 
-  // ==================== GÉNÉRAL ====================
-
-  if (cmd === 'help') {
-    const embed = new EmbedBuilder().setTitle('📜 Commandes du bot').setColor(MAIN_COLOR).setDescription(
-      '**Général**\n' +
-      '+pic [@user] · +banner [@user] · +ui [@user] · +serverinfo/+si\n' +
-      '+snipe · +ping · +mybotserv · +perms [wl/admin/owner]\n\n' +
-      '**Modération (Admin)**\n' +
-      '+lock/+unlock · +clear [@user] <n> · +slowmode <s> · +derank @user\n' +
-      '+addrole/+delrole @user @role · +rolemembers @role · +nick @user <nom|reset>\n' +
-      '+timeout/+untimeout @user <durée> · +rules <texte>\n\n' +
-      '**Avertissements**\n' +
-      '+warn @user <raison> · +warnlist @user · +clearwarns @user (WL) · +allwarns (Owner)\n\n' +
-      '**Sanctions avancées (WL)**\n' +
-      '+jail/+unjail @user · +wet/+unwet @user · +bl/+unbl @user · +antiraid · +unbanall\n\n' +
-      '**Menottes (Admin+)**\n' +
-      '+menotte @user [ID_salon] · +libre @user\n\n' +
-      '**Vocal**\n' +
-      '+mute/+unmute @user · +mutealls/+unmuteall (WL) · +mv @user · +randomvoc\n' +
-      '+wakeup @user [n] · +lockultra/+unlockultra (WL)\n\n' +
-      '**Giveaways** (+ ou /)\n' +
-      '+gstart <durée> <gagnants> <prix> · +gend <ID> · +greroll <ID> · +glist\n\n' +
-      '**Fun / Utilitaires**\n' +
-      '+edate @user · +say <ID> <msg> · +delchannel <ID>\n' +
-      '+flood <ID_salon> [@user] [n] · +fabulousbot @user (WL) · +smash · +dmall <msg> (Owner)\n\n' +
-      '**Listes** (Admin+)\n' +
-      '+lists · +wllist · +adminlist · +ownerlist · +jaillist · +wetlist · +blacklist · +banlist\n\n' +
-      '**Rôles & permissions (WL)**\n' +
-      '+limitrole @role <max> · +permimage/+delpermimage @role · +permmv @role\n' +
-      '+permaddrole/+delpermaddrole @role · +rolelock/+roleunlock @role\n' +
-      '+autorole @role · +sayroleselection <texte>\n\n' +
-      '**Owner**\n' +
-      '+wl/+unwl @user · +admin @user · +ownerbot/+removeownerbot @user\n' +
-      '+forcerole/+unforcerole @user @role · +invitelogger · +ghostjoins <ID>\n' +
-      '+welcomeIDchannel <ID> <msg> · +backup save/load · +exportconfig'
-    );
-    return message.channel.send({ embeds: [embed] });
-  }
+  
 
   if (cmd === 'perms') {
     const tier = (args[0] || '').toLowerCase();
