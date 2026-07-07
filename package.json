@@ -18,3 +18,7 @@
   "author": "Seiko",
   "license": "ISC"
 }
+"engines": {
+  "node": "20.x"
+}
+
