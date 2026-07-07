@@ -957,12 +957,7 @@ client.on('messageCreate', async message => {
         .then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
     }
   }
-      // Crée un fil de discussion
-    try {
-      const thread = await message.startThread({ ... });
-      ...
-    } catch (e) {}
-  }
+      
 
   // ==================== ← AJOUTE ICI ====================
   // ====================== PARSER DE COMMANDES ======================
