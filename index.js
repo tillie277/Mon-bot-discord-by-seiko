@@ -2171,6 +2171,11 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
+client.on('error', (err) => console.error('❌ Client error :', err));
+client.on('shardError', (err) => console.error('❌ Shard error :', err));
+client.on('shardDisconnect', (event, id) => console.error(`⚠️ Shard ${id} déconnecté :`, event?.code, event?.reason));
+process.on('unhandledRejection', (err) => console.error('❌ Unhandled rejection :', err));
+
 client.login(token)
   .then(() => console.log('✅ Login réussi - Bot prêt !'))
   .catch(err => console.error('❌ Login error :', err));
