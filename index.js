@@ -139,62 +139,80 @@ const writeJSONSafe = (p, data) => {
 };
 
 // ============================================================
-//  PERSISTANCE
+//  PERSISTANCE (tout est sauvegardé)
 // ============================================================
 function persistAll() {
-  writeJSONSafe(PATHS.whitelist, [...client.whitelist]);
-  writeJSONSafe(PATHS.admin, [...client.adminUsers]);
-  writeJSONSafe(PATHS.ownerBots, [...client.ownerBots]);
-  writeJSONSafe(PATHS.blacklist, [...client.blacklist]);
-  writeJSONSafe(PATHS.wetList, [...client.wetList]);
-  writeJSONSafe(PATHS.jailedMembers, [...client.jailedMembers]);
-  writeJSONSafe(PATHS.permMvRoles, [...client.permMvRoles]);
-  writeJSONSafe(PATHS.limitRoles, [...client.limitRoles.entries()]);
-  writeJSONSafe(PATHS.inviteLogger, client.inviteLoggerChannel);
-  writeJSONSafe(PATHS.ghostJoins, client.ghostJoinsChannel);
-  writeJSONSafe(PATHS.fabulousUsers, [...client.fabulousUsers]);
-  writeJSONSafe(PATHS.permAddRole, [...client.permAddRole.entries()]);
-  writeJSONSafe(PATHS.permImageRoles, [...client.permImageRoles]);
-  writeJSONSafe(PATHS.settings, { jailRoleId: client.jailRoleId, antiRaid: client.antiRaid });
-  writeJSONSafe(PATHS.autorole, client.autorole);
-  writeJSONSafe(PATHS.roleLocks, [...client.roleLocks.entries()]);
-  writeJSONSafe(PATHS.ultraLock, client.ultraLock);
-  writeJSONSafe(PATHS.warns, [...client.warns.entries()]);
-  writeJSONSafe(PATHS.forceRoles, [...client.forceRoles.entries()]);
-  writeJSONSafe(PATHS.giveaways, [...client.giveaways.entries()]);
-  writeJSONSafe(PATHS.menottes, [...client.menottes.entries()]);
-  writeJSONSafe(PATHS.mediaOnly, [...client.mediaOnlyChannels]);
-  writeJSONSafe(PATHS.welcomeConfig, client.welcomeConfig);
-  writeJSONSafe(path.join(DATA_DIR, 'dogLocks.json'), [...client.dogLocks.entries()]);
+  try {
+    writeJSONSafe(PATHS.whitelist, [...client.whitelist]);
+    writeJSONSafe(PATHS.admin, [...client.adminUsers]);
+    writeJSONSafe(PATHS.ownerBots, [...client.ownerBots]);
+    writeJSONSafe(PATHS.blacklist, [...client.blacklist]);
+    writeJSONSafe(PATHS.wetList, [...client.wetList]);
+    writeJSONSafe(PATHS.jailedMembers, [...client.jailedMembers]);
+    writeJSONSafe(PATHS.permMvRoles, [...client.permMvRoles]);
+    writeJSONSafe(PATHS.limitRoles, [...client.limitRoles.entries()]);
+    writeJSONSafe(PATHS.inviteLogger, client.inviteLoggerChannel);
+    writeJSONSafe(PATHS.ghostJoins, client.ghostJoinsChannel);
+    writeJSONSafe(PATHS.fabulousUsers, [...client.fabulousUsers]);
+    writeJSONSafe(PATHS.permAddRole, [...client.permAddRole.entries()]);
+    writeJSONSafe(PATHS.permImageRoles, [...client.permImageRoles]);
+    writeJSONSafe(PATHS.settings, { jailRoleId: client.jailRoleId, antiRaid: client.antiRaid });
+    writeJSONSafe(PATHS.autorole, client.autorole);
+    writeJSONSafe(PATHS.roleLocks, [...client.roleLocks.entries()]);
+    writeJSONSafe(PATHS.ultraLock, client.ultraLock);
+    writeJSONSafe(PATHS.warns, [...client.warns.entries()]);
+    writeJSONSafe(PATHS.forceRoles, [...client.forceRoles.entries()]);
+    writeJSONSafe(PATHS.giveaways, [...client.giveaways.entries()]);
+    writeJSONSafe(PATHS.menottes, [...client.menottes.entries()]);
+    writeJSONSafe(PATHS.mediaOnly, [...client.mediaOnlyChannels]);
+    writeJSONSafe(PATHS.welcomeConfig, client.welcomeConfig);
+    writeJSONSafe(path.join(DATA_DIR, 'dogLocks.json'), [...client.dogLocks.entries()]);
+  } catch (e) {
+    console.error('❌ Erreur persistAll:', e);
+  }
 }
 
 function loadAll() {
-  const wl = readJSONSafe(PATHS.whitelist); if (Array.isArray(wl)) wl.forEach(id => client.whitelist.add(id));
-  const adm = readJSONSafe(PATHS.admin); if (Array.isArray(adm)) adm.forEach(id => client.adminUsers.add(id));
-  const ob = readJSONSafe(PATHS.ownerBots); if (Array.isArray(ob)) ob.forEach(id => client.ownerBots.add(id));
-  const bl = readJSONSafe(PATHS.blacklist); if (Array.isArray(bl)) bl.forEach(id => client.blacklist.add(id));
-  const wet = readJSONSafe(PATHS.wetList); if (Array.isArray(wet)) wet.forEach(id => client.wetList.add(id));
-  const jm = readJSONSafe(PATHS.jailedMembers); if (Array.isArray(jm)) jm.forEach(id => client.jailedMembers.add(id));
-  const pmv = readJSONSafe(PATHS.permMvRoles); if (Array.isArray(pmv)) pmv.forEach(id => client.permMvRoles.add(id));
-  const lr = readJSONSafe(PATHS.limitRoles); if (Array.isArray(lr)) lr.forEach(([k, v]) => client.limitRoles.set(k, v));
-  client.inviteLoggerChannel = readJSONSafe(PATHS.inviteLogger);
-  client.ghostJoinsChannel = readJSONSafe(PATHS.ghostJoins);
-  const fab = readJSONSafe(PATHS.fabulousUsers); if (Array.isArray(fab)) fab.forEach(id => client.fabulousUsers.add(id));
-  const permAdd = readJSONSafe(PATHS.permAddRole); if (Array.isArray(permAdd)) permAdd.forEach(([k, v]) => client.permAddRole.set(k, v));
-  const permImg = readJSONSafe(PATHS.permImageRoles); if (Array.isArray(permImg)) permImg.forEach(id => client.permImageRoles.add(id));
-  const settings = readJSONSafe(PATHS.settings);
-  if (settings) { client.jailRoleId = settings.jailRoleId || null; client.antiRaid = settings.antiRaid ?? false; }
-  client.autorole = readJSONSafe(PATHS.autorole) || null;
-  const rl = readJSONSafe(PATHS.roleLocks); if (Array.isArray(rl)) rl.forEach(([k, v]) => client.roleLocks.set(k, v));
-  const ul = readJSONSafe(PATHS.ultraLock); if (ul) client.ultraLock = ul;
-  const warns = readJSONSafe(PATHS.warns); if (Array.isArray(warns)) warns.forEach(([k, v]) => client.warns.set(k, v));
-  const fr = readJSONSafe(PATHS.forceRoles); if (Array.isArray(fr)) fr.forEach(([k, v]) => client.forceRoles.set(k, v));
-  const gv = readJSONSafe(PATHS.giveaways); if (Array.isArray(gv)) gv.forEach(([k, v]) => client.giveaways.set(k, v));
-  const mn = readJSONSafe(PATHS.menottes); if (Array.isArray(mn)) mn.forEach(([k, v]) => client.menottes.set(k, v));
-  const mo = readJSONSafe(PATHS.mediaOnly); if (Array.isArray(mo)) mo.forEach(id => client.mediaOnlyChannels.add(id));
-  client.welcomeConfig = readJSONSafe(PATHS.welcomeConfig) || null;
-  const dogData = readJSONSafe(path.join(DATA_DIR, 'dogLocks.json'));
-  if (dogData) dogData.forEach(([k, v]) => client.dogLocks.set(k, v));
+  try {
+    const wl = readJSONSafe(PATHS.whitelist); if (Array.isArray(wl)) wl.forEach(id => client.whitelist.add(id));
+    const adm = readJSONSafe(PATHS.admin); if (Array.isArray(adm)) adm.forEach(id => client.adminUsers.add(id));
+    const ob = readJSONSafe(PATHS.ownerBots); if (Array.isArray(ob)) ob.forEach(id => client.ownerBots.add(id));
+    const bl = readJSONSafe(PATHS.blacklist); if (Array.isArray(bl)) bl.forEach(id => client.blacklist.add(id));
+    const wet = readJSONSafe(PATHS.wetList); if (Array.isArray(wet)) wet.forEach(id => client.wetList.add(id));
+    const jm = readJSONSafe(PATHS.jailedMembers); if (Array.isArray(jm)) jm.forEach(id => client.jailedMembers.add(id));
+    const pmv = readJSONSafe(PATHS.permMvRoles); if (Array.isArray(pmv)) pmv.forEach(id => client.permMvRoles.add(id));
+    const lr = readJSONSafe(PATHS.limitRoles); if (Array.isArray(lr)) lr.forEach(([k, v]) => client.limitRoles.set(k, v));
+    
+    client.inviteLoggerChannel = readJSONSafe(PATHS.inviteLogger);
+    client.ghostJoinsChannel = readJSONSafe(PATHS.ghostJoins);
+    
+    const fab = readJSONSafe(PATHS.fabulousUsers); if (Array.isArray(fab)) fab.forEach(id => client.fabulousUsers.add(id));
+    const permAdd = readJSONSafe(PATHS.permAddRole); if (Array.isArray(permAdd)) permAdd.forEach(([k, v]) => client.permAddRole.set(k, v));
+    const permImg = readJSONSafe(PATHS.permImageRoles); if (Array.isArray(permImg)) permImg.forEach(id => client.permImageRoles.add(id));
+    
+    const settings = readJSONSafe(PATHS.settings);
+    if (settings) {
+      client.jailRoleId = settings.jailRoleId || null;
+      client.antiRaid = settings.antiRaid ?? false;
+    }
+    
+    client.autorole = readJSONSafe(PATHS.autorole) || null;
+    const rl = readJSONSafe(PATHS.roleLocks); if (Array.isArray(rl)) rl.forEach(([k, v]) => client.roleLocks.set(k, v));
+    const ul = readJSONSafe(PATHS.ultraLock); if (ul) client.ultraLock = ul;
+    const warns = readJSONSafe(PATHS.warns); if (Array.isArray(warns)) warns.forEach(([k, v]) => client.warns.set(k, v));
+    const fr = readJSONSafe(PATHS.forceRoles); if (Array.isArray(fr)) fr.forEach(([k, v]) => client.forceRoles.set(k, v));
+    const gv = readJSONSafe(PATHS.giveaways); if (Array.isArray(gv)) gv.forEach(([k, v]) => client.giveaways.set(k, v));
+    const mn = readJSONSafe(PATHS.menottes); if (Array.isArray(mn)) mn.forEach(([k, v]) => client.menottes.set(k, v));
+    const mo = readJSONSafe(PATHS.mediaOnly); if (Array.isArray(mo)) mo.forEach(id => client.mediaOnlyChannels.add(id));
+    client.welcomeConfig = readJSONSafe(PATHS.welcomeConfig) || null;
+
+    // DogLocks
+    const dogData = readJSONSafe(path.join(DATA_DIR, 'dogLocks.json'));
+    if (Array.isArray(dogData)) dogData.forEach(([k, v]) => client.dogLocks.set(k, v));
+
+  } catch (e) {
+    console.error('❌ Erreur loadAll:', e);
+  }
 }
 
 // ============================================================
@@ -1718,72 +1736,88 @@ client.on('messageCreate', async message => {
   }
   // ==================== DOG & SNAP ====================
 
-  if (['dog', 'snap', 'undog', 'undogalls'].includes(cmd)) {
-    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé. (seuls owner/ownerbot/wl/admins)');
+if (['dog', 'snap', 'undog', 'undogalls'].includes(cmd)) {
+  if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
 
-    if (cmd === 'dog') {
-      const target = await resolveMember(message, args[0]);
-      if (!target) return message.reply('❌ Mentionne la cible.');
-
-      const targetDisplay = target.user.tag || target.displayName;
-      const executorDisplay = message.author.tag || message.member.displayName;
-      const newNick = `${targetDisplay} (🦮 de ${executorDisplay})`;
-      const originalNick = target.nickname || target.user.username;
-
-      await target.setNickname(newNick).catch(() => {});
-
-      client.dogLocks.set(target.id, {
-        lockedNick: newNick,
-        executorId: message.author.id,
-        originalNick: originalNick
-      });
-
-      persistAll();
-      return message.channel.send(`🦮 ${target} est maintenant dog de ${message.author}.`);
-    }
-
-    if (cmd === 'undog') {
-      const target = await resolveMember(message, args[0]);
-      if (!target) return message.reply('❌ Mentionne la cible.');
-      if (!client.dogLocks.has(target.id)) return message.reply("❌ Cette personne n'est pas dog.");
-
-      const data = client.dogLocks.get(target.id);
-      await target.setNickname(data.originalNick || null).catch(() => {});
-      client.dogLocks.delete(target.id);
-      persistAll();
-      return message.channel.send(`✅ ${target} n'est plus dog.`);
-    }
-
-    if (cmd === 'undogalls') {
-      let count = 0;
-      for (const [id, data] of client.dogLocks.entries()) {
-        const m = message.guild.members.cache.get(id);
-        if (m) await m.setNickname(data.originalNick || null).catch(() => {});
-        client.dogLocks.delete(id);
-        count++;
-      }
-      persistAll();
-      return message.channel.send(`✅ ${count} dog(s) retiré(s).`);
-    }
-
-    if (cmd === 'snap') {
-      const target = await resolveMember(message, args[0]);
-      if (!target) return message.reply('❌ Mentionne la cible.');
-
-      const executorName = message.author.tag || message.member.displayName;
-      const msg = `${executorName} vous demande votre snap`;
-
-      for (let i = 0; i < 5; i++) {
-        try {
-          await target.user.send(msg);
-          await new Promise(r => setTimeout(r, 800));
-        } catch {
-          return message.reply("❌ Impossible d'envoyer les DM (ils sont fermés).");
-        }
-      }
-      return message.channel.send(`📸 5 snaps envoyés à ${target}.`);
-    }
+  // Vérification hiérarchie pour dog / undog
+  if (cmd === 'dog' || cmd === 'undog' || cmd === 'undogalls') {
+    if (!isWL(authorId)) return message.reply('❌ Seul WL+ peut utiliser les commandes Dog.');
   }
+
+  if (cmd === 'dog') {
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Mentionne la cible.');
+
+    // ❌ Impossible de dog Owner ou OwnerBot
+    if (isOwner(target.id) || isOwnerBot(target.id)) {
+      return message.reply('❌ Tu ne peux pas dog un Owner ou OwnerBot.');
+    }
+
+    // Vérification hiérarchie
+    if (!canSanction(authorId, target.id)) {
+      return message.reply("❌ Tu ne peux pas dog quelqu'un de ton rang ou supérieur.");
+    }
+
+    const targetDisplay = target.user.tag || target.displayName;
+    const executorDisplay = message.author.tag || message.member.displayName;
+    const newNick = `${targetDisplay} (🦮 de ${executorDisplay})`;
+    const originalNick = target.nickname || target.user.username;
+
+    await target.setNickname(newNick).catch(() => {});
+
+    client.dogLocks.set(target.id, {
+      lockedNick: newNick,
+      executorId: message.author.id,
+      originalNick: originalNick
+    });
+
+    persistAll();
+    return message.channel.send(`🦮 ${target} est maintenant dog de ${message.author}.`);
+  }
+
+  if (cmd === 'undog') {
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Mentionne la cible.');
+    if (!client.dogLocks.has(target.id)) return message.reply("❌ Cette personne n'est pas dog.");
+
+    const data = client.dogLocks.get(target.id);
+    await target.setNickname(data.originalNick || null).catch(() => {});
+    client.dogLocks.delete(target.id);
+    persistAll();
+    return message.channel.send(`✅ ${target} n'est plus dog.`);
+  }
+
+  if (cmd === 'undogalls') {
+    if (!isOwnerBot(authorId)) return message.reply('❌ Seul Owner/OwnerBot peut faire undogalls.');
+    let count = 0;
+    for (const [id, data] of client.dogLocks.entries()) {
+      const m = message.guild.members.cache.get(id);
+      if (m) await m.setNickname(data.originalNick || null).catch(() => {});
+      client.dogLocks.delete(id);
+      count++;
+    }
+    persistAll();
+    return message.channel.send(`✅ ${count} dog(s) retiré(s).`);
+  }
+
+  if (cmd === 'snap') {
+    const target = await resolveMember(message, args[0]);
+    if (!target) return message.reply('❌ Mentionne la cible.');
+
+    const executorName = message.author.tag || message.member.displayName;
+    const msg = `${executorName} vous demande votre snap`;
+
+    for (let i = 0; i < 5; i++) {
+      try {
+        await target.user.send(msg);
+        await new Promise(r => setTimeout(r, 800));
+      } catch {
+        return message.reply("❌ Impossible d'envoyer les DM (ils sont fermés).");
+      }
+    }
+    return message.channel.send(`📸 5 snaps envoyés à ${target}.`);
+  }
+}
   // ==================== LISTES (ADMIN) ====================
 
   if (cmd === 'lists') {
@@ -2146,6 +2180,11 @@ if (!token) {
     console.error('Va dans Environment → Add Variable → TOKEN = ton_token');
     process.exit(1);
 }
+process.on('SIGINT', () => {
+  console.log('💾 Sauvegarde avant arrêt...');
+  persistAll();
+  process.exit(0);
+});
 
 client.login(token)
   .then(() => console.log('✅ Login réussi - Bot prêt !'))
