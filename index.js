@@ -2180,6 +2180,13 @@ console.log('Token détecté, longueur :', token?.length || 0);
 console.log('discord.js version:', require('discord.js').version);
 setInterval(() => console.log('⏱ toujours vivant -', new Date().toISOString()), 10000);
 
+const loginTimeout = setTimeout(() => {
+  console.error('❌ TIMEOUT : le login Discord n\'a pas abouti après 20 secondes. Problème réseau probable.');
+}, 20000);
+
+client.login(token)
+  .then(() => { clearTimeout(loginTimeout); console.log('✅ Login réussi - Bot prêt !'); })
+  .catch(err => { clearTimeout(loginTimeout); console.error('❌ Login error :', err); });
 
 client.login(token)
   .then(() => console.log('✅ Login réussi - Bot prêt !'))
