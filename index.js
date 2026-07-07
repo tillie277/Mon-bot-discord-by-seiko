@@ -996,32 +996,34 @@ client.on('messageCreate', async message => {
     }
   }
 
-  // ---- Mode images/vidéos uniquement (+smash) ----
-  if (client.mediaOnlyChannels.has(message.channel.id) && !hasAccess(member, 'admin')) {
-    const hasMedia = message.attachments.size > 0 || /https?:\/\/\S+\.(png|jpe?g|gif|webp|mp4|mov|webm)(\?\S*)?$/i.test(message.content);
-    if (!hasMedia) { await message.delete().catch(() => {}); return; }
+    // ---- MODE SMASH OR PASS (Photos + Vidéos sans mp4) ----
+  if (client.mediaOnlyChannels.has(message.channel.id)) {
+    const content = message.content.toLowerCase();
+
+    const hasMedia = 
+      message.attachments.size > 0 || 
+      /\.(png|jpg|jpeg|gif|webp)$/i.test(content) ||      // Photos
+      /\.(mov|webm|avi)$/i.test(content);                // Vidéos autorisées (sans mp4)
+
+    // Supprime tout message qui n'est pas une photo ou vidéo
+    if (!hasMedia) {
+      await message.delete().catch(() => {});
+      return;
+    }
+
+    // Réactions automatiques
     await message.react('✅').catch(() => {});
     await message.react('❌').catch(() => {});
-    await message.startThread({ name: `Avis sur le post de ${message.author.username}`.slice(0, 90), autoArchiveDuration: 1440 }).catch(() => {});
-  }
 
-  if (message.mentions.has(client.user)) {
-    if (isOwnerBot(authorId)) return message.reply('Salut boss, prêt à tout 🔥');
-    return message.reply(' tu veux quoi freuurrr ');
-  }
-
-  if (!message.content.startsWith(PREFIX)) return;
-
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift().toLowerCase();
-
-  const logs = await ensureLogChannels(message.guild);
-  if (logs.commande) {
-    logs.commande.send({ embeds: [buildLogEmbed({
-      author: { name: message.author.tag, iconURL: message.author.displayAvatarURL({ dynamic: true }) },
-      description: `📌 Commande utilisée dans ${message.channel}`,
-      fields: [{ name: 'Commande', value: `\`${message.content.slice(0, 500)}\`` }],
-    })] }).catch(() => {});
+    // Crée un fil de discussion
+    try {
+      const thread = await message.startThread({
+        name: `Discussion - ${message.author.username}`,
+        autoArchiveDuration: 1440,
+        reason: 'Smash or Pass Thread'
+      });
+      thread.send(`💬 Discussion pour le post de ${message.author}`).catch(() => {});
+    } catch (e) {}
   }
 
   // ==================== GÉNÉRAL ====================
@@ -1708,16 +1710,44 @@ client.on('messageCreate', async message => {
     return message.channel.send(`✨ ${target} est maintenant **fabulousbot** ! Toute sanction (mute, sourdine, timeout, déplacement, déconnexion, rename, derank) faite sur lui se retournera contre son auteur.`);
   }
 
-  if (cmd === 'smash') {
-    if (!hasAccess(member, 'admin')) return message.reply('❌ Accès refusé.');
-    if (client.mediaOnlyChannels.has(message.channel.id)) {
-      client.mediaOnlyChannels.delete(message.channel.id);
-      persistAll();
-      return message.channel.send('✅ Mode images/vidéos uniquement désactivé sur ce salon.');
+    if (cmd === 'smash') {
+    if (!isOwnerBot(authorId)) {
+      return message.reply('❌ Seul **Owner** ou **OwnerBot** peut activer/désactiver le mode Smash or Pass.');
     }
-    client.mediaOnlyChannels.add(message.channel.id);
-    persistAll();
-    return message.channel.send('📸 Mode images/vidéos uniquement activé sur ce salon (smash ✅ / pass ❌, avec fil de discussion par post).');
+
+    const channel = message.channel;
+
+    // Activation
+    if (!client.mediaOnlyChannels.has(channel.id)) {
+      client.mediaOnlyChannels.add(channel.id);
+      persistAll();
+
+      await message.channel.send({
+        embeds: [{
+          title: '📸 Mode **Smash or Pass** Activé',
+          description: 'Ce salon est maintenant en mode **Smash or Pass**.\n\n' +
+                       '• Seuls les **images et vidéos** sont autorisés\n' +
+                       '• Réactions ✅ / ❌ automatiques\n' +
+                       '• Un fil de discussion est créé sous chaque média',
+          color: MAIN_COLOR
+        }]
+      });
+      return;
+    } 
+    // Désactivation
+    else {
+      client.mediaOnlyChannels.delete(channel.id);
+      persistAll();
+
+      await message.channel.send({
+        embeds: [{
+          title: ' Mode Smash or Pass Désactivé',
+          description: 'Le salon est revenu à la normale.',
+          color: MAIN_COLOR
+        }]
+      });
+      return;
+    }
   }
 
   if (cmd === 'dmall') {
