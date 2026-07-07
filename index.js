@@ -2188,6 +2188,18 @@ client.login(token)
   .then(() => { clearTimeout(loginTimeout); console.log('✅ Login réussi - Bot prêt !'); })
   .catch(err => { clearTimeout(loginTimeout); console.error('❌ Login error :', err); });
 
+const https = require('https');
+https.get({
+  hostname: 'discord.com',
+  path: '/api/v10/users/@me',
+  headers: { Authorization: `Bot ${token}` }
+}, (res) => {
+  let data = '';
+  res.on('data', c => data += c);
+  res.on('end', () => console.log('🔍 Test API Discord - status:', res.statusCode, '- réponse:', data.slice(0, 200)));
+}).on('error', (err) => console.error('🔍 Test API Discord - erreur réseau:', err.message));
+
+
 client.login(token)
   .then(() => console.log('✅ Login réussi - Bot prêt !'))
   .catch(err => console.error('❌ Login error :', err));
