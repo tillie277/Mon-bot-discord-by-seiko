@@ -2188,7 +2188,6 @@ client.login(token)
   .then(() => { clearTimeout(loginTimeout); console.log('✅ Login réussi - Bot prêt !'); })
   .catch(err => { clearTimeout(loginTimeout); console.error('❌ Login error :', err); });
 
-const https = require('https');
 https.get({
   hostname: 'discord.com',
   path: '/api/v10/users/@me',
