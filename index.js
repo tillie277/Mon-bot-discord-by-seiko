@@ -1750,7 +1750,7 @@ if (['dog', 'snap', 'undog', 'undogalls'].includes(cmd)) {
 
     // ❌ Impossible de dog Owner ou OwnerBot
     if (isOwner(target.id) || isOwnerBot(target.id)) {
-      return message.reply('❌ Tu ne peux pas dog un Owner ou OwnerBot.');
+      return message.reply('❌ Accès refusé.');
     }
 
     // Vérification hiérarchie
